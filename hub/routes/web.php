@@ -1,0 +1,47 @@
+<?php
+
+use App\Http\Controllers\AiGenerationController;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\HubController;
+use App\Http\Controllers\MonitoringController;
+use App\Http\Controllers\PublicationController;
+use App\Http\Controllers\SocialAccountController;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware('guest')->group(function () {
+    Route::view('/login', 'login')->name('login');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
+});
+Route::middleware('auth')->group(function () {
+    Route::get('/monitoring', [MonitoringController::class, 'index'])->name('monitoring');
+    Route::put('/monitoring/applications/{brand}', [MonitoringController::class, 'save'])->name('monitoring.save');
+    Route::get('/monitoring/{monitor}', [MonitoringController::class, 'show'])->name('monitoring.show');
+    Route::post('/monitoring/{monitor}/check', [MonitoringController::class, 'check'])->middleware('throttle:10,1')->name('monitoring.check');
+    Route::get('/social-accounts', [SocialAccountController::class, 'index'])->name('social');
+    Route::post('/social-accounts', [SocialAccountController::class, 'store'])->name('social.store');
+    Route::put('/social-accounts/{account}', [SocialAccountController::class, 'update'])->name('social.update');
+    Route::post('/social-accounts/{account}/verify', [SocialAccountController::class, 'verify'])->middleware('throttle:10,1')->name('social.verify');
+    Route::delete('/social-accounts/{account}', [SocialAccountController::class, 'disconnect'])->name('social.disconnect');
+    Route::get('/posts/{post}/publish', [PublicationController::class, 'preview'])->name('posts.publish');
+    Route::post('/posts/{post}/publish', [PublicationController::class, 'publish'])->middleware('throttle:10,1')->name('posts.publish.store');
+    Route::post('/publications/{publication}/link', [PublicationController::class, 'refreshLink'])->middleware('throttle:10,1')->name('publications.link');
+    Route::get('/ai-assistant', [AiGenerationController::class, 'index'])->name('ai');
+    Route::post('/ai-assistant', [AiGenerationController::class, 'generate'])->middleware('throttle:10,1')->name('ai.generate');
+    Route::get('/ai-assistant/{generation}', [AiGenerationController::class, 'show'])->name('ai.show');
+    Route::post('/ai-assistant/{generation}/draft', [AiGenerationController::class, 'save'])->name('ai.save');
+    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+    Route::get('/', [HubController::class, 'dashboard'])->name('dashboard');
+    Route::get('/applications', [HubController::class, 'applications'])->name('applications');
+    Route::get('/applications/new', [HubController::class, 'brandForm'])->name('applications.create');
+    Route::post('/applications', [HubController::class, 'saveBrand'])->name('applications.store');
+    Route::get('/applications/{brand}/edit', [HubController::class, 'brandForm'])->name('applications.edit');
+    Route::put('/applications/{brand}', [HubController::class, 'saveBrand'])->name('applications.update');
+    Route::get('/posts', [HubController::class, 'posts'])->name('posts');
+    Route::get('/posts/new', [HubController::class, 'postForm'])->name('posts.create');
+    Route::post('/posts', [HubController::class, 'savePost'])->name('posts.store');
+    Route::get('/posts/{post}/edit', [HubController::class, 'postForm'])->name('posts.edit');
+    Route::put('/posts/{post}', [HubController::class, 'savePost'])->name('posts.update');
+    Route::post('/posts/{post}/review', [HubController::class, 'reviewPost'])->name('posts.review');
+    Route::get('/ai-providers', [HubController::class, 'providers'])->name('providers');
+    Route::put('/ai-providers/{provider}', [HubController::class, 'saveProvider'])->name('providers.update');
+});

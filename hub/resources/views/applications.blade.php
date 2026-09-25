@@ -1,0 +1,7 @@
+@extends('layouts.app')
+@section('title','Applications')
+@section('content')
+<div class="page-heading"><div><div class="eyebrow">EVERY BRAND HAS A VOICE</div><h1>Your applications</h1><p class="muted">Add any website, product or organization. Keep its content distinct.</p></div><a class="button" href="{{ route('applications.create') }}">＋ Add application</a></div>
+<div class="cards">@forelse($brands as $brand)<article class="panel brand-card"><span class="app-icon">{{ mb_substr($brand->name,0,1) }}</span><h2>{{ $brand->name }}</h2><p class="muted">{{ \Illuminate\Support\Str::limit($brand->description?:'Add a description to guide future content.',130) }}</p><div class="tags"><span>{{ $brand->language }}</span><span>{{ $brand->posts_count }} posts</span></div><div class="card-footer"><a href="{{ route('applications.edit',$brand) }}">Manage application →</a><a href="{{ route('posts',['brand'=>$brand->id]) }}">Posts</a></div></article>@empty<div class="panel empty wide"><span class="empty-icon">▦</span><h2>Make room for your first brand.</h2><p>Start with a name and a voice. Add sources and social connections later.</p><a class="button" href="{{ route('applications.create') }}">Add application</a></div>@endforelse</div>
+@endsection
+
