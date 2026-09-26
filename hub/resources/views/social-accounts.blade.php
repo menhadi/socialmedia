@@ -56,6 +56,8 @@
             <summary>Edit saved setup</summary>
             <form method="post" action="{{ route('social.update',$account) }}">
                 @csrf @method('PUT')
+                <label>{{ $accountSetup['id_label'] }}<input name="page_id" required maxlength="50" value="{{ $account->page_id }}"></label>
+                <p class="muted small">{{ $accountSetup['id_hint'] }} Changing the ID resets verification. A blank token field keeps the saved token; make sure it belongs to the corrected account.</p>
                 @include('social-account-fields',['platform'=>$account->provider,'setup'=>$accountSetup,'editing'=>true,'account'=>$account])
                 <button class="button secondary">Save changes</button>
             </form>

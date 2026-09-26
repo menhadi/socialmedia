@@ -70,9 +70,25 @@ class SocialAccountController extends Controller
     public function update(Request $request, SocialAccount $account): RedirectResponse
     {
         $this->own($request, $account);
-        $data = $request->validate(AccountSetup::rules($account->provider));
+        $data = $request->validate([
+            'page_id' => ['sometimes', 'required', 'string', 'max:50', 'regex:'.AccountSetup::PROVIDERS[$account->provider]['id_pattern']],
+        ] + AccountSetup::rules($account->provider), [
+            'page_id.regex' => AccountSetup::PROVIDERS[$account->provider]['id_hint'],
+        ]);
         DB::transaction(function () use ($account, $data): void {
+            Brand::whereKey($account->brand_id)->lockForUpdate()->firstOrFail();
             $account = SocialAccount::whereKey($account->id)->lockForUpdate()->firstOrFail();
+            if (isset($data['page_id']) && $data['page_id'] !== $account->page_id) {
+                if (SocialAccount::where('brand_id', $account->brand_id)->where('provider', $account->provider)
+                    ->where('page_id', $data['page_id'])->whereKeyNot($account->id)->exists()) {
+                    throw ValidationException::withMessages(['page_id' => 'This account is already saved for this application. Edit its setup below.']);
+                }
+                $account->page_id = $data['page_id'];
+                $account->page_name = null;
+                $account->verified_at = null;
+                $account->error_code = null;
+                $account->credential_version = (string) Str::uuid();
+            }
             if (array_key_exists('display_name', $data)) {
                 $account->display_name = $data['display_name'];
             }
@@ -93,7 +109,7 @@ class SocialAccountController extends Controller
         }, 5);
 
         return back()->with('success', $account->provider === 'facebook'
-            ? 'Setup saved. If you replaced the token, verify the Page again before publishing.'
+            ? 'Setup saved. If you changed the Page ID or token, verify the Page again before publishing.'
             : 'Setup saved for later testing. Posting is not enabled for this account.');
     }
 

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Brand;
 use App\Models\Post;
+use App\Models\Publication;
 use App\Models\SocialAccount;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -136,7 +137,7 @@ class SocialAccountSetupTest extends TestCase
         $account = SocialAccount::where('provider', 'whatsapp')->where('brand_id', $brand->id)->firstOrFail();
         $this->put("/social-accounts/{$account->id}", ['provider' => 'facebook', 'brand_id' => $secondBrand->id, 'page_id' => '999', 'verified_at' => now(), 'access_token' => 'new-token'])->assertSessionHasNoErrors();
         $this->assertSame('whatsapp', $account->fresh()->provider);
-        $this->assertSame('12345', $account->fresh()->page_id);
+        $this->assertSame('999', $account->fresh()->page_id);
         $this->assertSame($brand->id, $account->fresh()->brand_id);
         $this->assertNull($account->fresh()->verified_at);
         Http::assertNothingSent();
@@ -149,7 +150,7 @@ class SocialAccountSetupTest extends TestCase
         $this->actingAs(User::factory()->create());
         $this->get('/social-accounts')->assertDontSee('Private sender');
         $this->post('/social-accounts', ['provider' => 'whatsapp', 'brand_id' => $brand->id, 'page_id' => '12345'])->assertSessionHasErrors('brand_id');
-        $this->put("/social-accounts/{$account->id}", ['access_token' => 'stolen'])->assertNotFound();
+        $this->put("/social-accounts/{$account->id}", ['page_id' => '999', 'access_token' => 'stolen'])->assertNotFound();
         $this->post("/social-accounts/{$account->id}/verify")->assertNotFound();
         $this->delete("/social-accounts/{$account->id}")->assertNotFound();
         $this->assertSame('test-page-token', $account->fresh()->access_token);
@@ -188,10 +189,58 @@ class SocialAccountSetupTest extends TestCase
     {
         $brand = $this->brand();
         $account = SocialAccount::factory()->create(['brand_id' => $brand->id]);
-        $this->put("/social-accounts/{$account->id}", ['display_name' => '<script>alert(1)</script>', 'access_token' => ''])->assertSessionHasNoErrors();
+        $this->put("/social-accounts/{$account->id}", ['page_id' => $account->page_id, 'display_name' => '<script>alert(1)</script>', 'access_token' => ''])->assertSessionHasNoErrors();
         $this->assertNotNull($account->fresh()->verified_at);
         $this->get('/social-accounts')->assertOk()->assertSee('&lt;script&gt;', false)->assertDontSee('<script>alert(1)</script>', false);
         $this->get('/')->assertOk()->assertSee('Social accounts saved')->assertSee('1 Facebook Pages verified');
+        Http::assertNothingSent();
+    }
+
+    public function test_page_id_correction_updates_existing_account_and_preserves_token_and_history(): void
+    {
+        $brand = $this->brand();
+        $account = SocialAccount::factory()->create(['brand_id' => $brand->id, 'page_id' => '12345', 'error_code' => 'rejected']);
+        $publication = Publication::factory()->create(['social_account_id' => $account->id, 'status' => 'published']);
+        $history = $publication->fresh()->getAttributes();
+
+        $this->put("/social-accounts/{$account->id}", ['page_id' => '67890', 'access_token' => ''])->assertSessionHasNoErrors();
+
+        $saved = $account->fresh();
+        $this->assertSame('67890', $saved->page_id);
+        $this->assertSame($account->access_token, $saved->access_token);
+        $this->assertNull($saved->verified_at);
+        $this->assertNull($saved->page_name);
+        $this->assertNull($saved->error_code);
+        $this->assertNotSame($account->credential_version, $saved->credential_version);
+        $this->assertSame($history, $publication->fresh()->getAttributes());
+        $this->assertDatabaseCount('social_accounts', 1);
+        $this->get('/social-accounts')->assertOk()->assertSee('value="67890"', false)->assertSee('Not tested');
+        Http::assertNothingSent();
+    }
+
+    public function test_duplicate_page_id_edit_is_rejected_without_changing_credentials(): void
+    {
+        $brand = $this->brand();
+        $account = SocialAccount::factory()->create(['brand_id' => $brand->id, 'page_id' => '12345']);
+        SocialAccount::factory()->create(['brand_id' => $brand->id, 'page_id' => '67890']);
+
+        $this->put("/social-accounts/{$account->id}", ['page_id' => '67890', 'access_token' => 'replacement-token'])
+            ->assertSessionHasErrors('page_id');
+
+        $this->assertSame('12345', $account->fresh()->page_id);
+        $this->assertSame($account->access_token, $account->fresh()->access_token);
+        $this->assertNotNull($account->fresh()->verified_at);
+        $this->assertDatabaseCount('social_accounts', 2);
+        Http::assertNothingSent();
+    }
+
+    #[DataProvider('invalidIds')]
+    public function test_invalid_id_edits_leave_the_saved_account_unchanged(string $provider, string $id): void
+    {
+        $brand = $this->brand();
+        $account = SocialAccount::factory()->create(['brand_id' => $brand->id, 'provider' => $provider]);
+        $this->put("/social-accounts/{$account->id}", ['page_id' => $id])->assertSessionHasErrors('page_id');
+        $this->assertSame($account->page_id, $account->fresh()->page_id);
         Http::assertNothingSent();
     }
 }
