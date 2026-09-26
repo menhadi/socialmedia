@@ -15,4 +15,3 @@
 @empty<div class="panel empty"><h2>No scheduled posts yet.</h2><p>Review a Facebook post, then open its publishing preview to choose a date and time.</p><a href="{{ route('posts') }}">Open posts →</a></div>@endforelse
 {{ $schedules->links() }}
 @endsection
-

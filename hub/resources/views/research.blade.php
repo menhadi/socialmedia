@@ -69,4 +69,3 @@
 @empty<p class="muted">Source evidence and generated drafts will appear here.</p>@endforelse
 {{ $snapshots->links() }}
 @endsection
-
