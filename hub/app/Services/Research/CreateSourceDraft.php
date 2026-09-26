@@ -7,6 +7,7 @@ use App\Models\Post;
 use App\Models\SourceSnapshot;
 use App\Models\User;
 use App\Services\Ai\GenerateContent;
+use App\Services\Media\GenerateMedia;
 use App\Services\Social\SchedulePost;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -86,6 +87,16 @@ class CreateSourceDraft
             $generation->post_id = $post->id;
             $generation->save();
             $draftFingerprint = $post->publishingFingerprint();
+            if (in_array($source->media_kind, ['image', 'video'], true)) {
+                app(GenerateMedia::class)->reserve(User::findOrFail($source->brand->user_id), $post, [
+                    'request_key' => (string) Str::uuid(), 'fingerprint' => $draftFingerprint,
+                    'kind' => $source->media_kind, 'aspect_ratio' => '16:9',
+                    'prompt' => 'Create a professional illustrative visual supporting the saved post. Do not invent facts, official seals, exam dates or results. Avoid small text.',
+                ]);
+                $snapshot->update(['reason' => 'AI media queued. Open the draft’s AI media page to review and attach it, then review and schedule the post.']);
+
+                return;
+            }
             $image = [];
             if ($source->with_image) {
                 try {

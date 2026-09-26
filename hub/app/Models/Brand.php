@@ -10,7 +10,7 @@ class Brand extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['name', 'website', 'description', 'audience', 'tone', 'language', 'instructions', 'ai_connection_id'];
+    protected $fillable = ['name', 'website', 'description', 'audience', 'tone', 'language', 'instructions', 'ai_connection_id', 'image_connection_id', 'video_connection_id'];
 
     public function posts()
     {

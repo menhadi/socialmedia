@@ -80,7 +80,7 @@ class ScheduleController extends Controller
                 throw ValidationException::withMessages(['image' => 'Image renderer unavailable. The server needs ImageMagick with Pango; configure HUB_IMAGE_CONVERT.']);
             }
             $post->schedules()->where('status', 'queued')->update(['status' => 'cancelled', 'reason' => 'Image changed.']);
-            $post->forceFill($data + ['status' => 'draft', 'reviewed_at' => null])->save();
+            $post->forceFill($data + ['status' => 'draft', 'reviewed_at' => null, 'video_path' => null, 'video_hash' => null])->save();
         });
 
         return back()->with('success', 'Branded image created. Review the post and image together before publishing.');

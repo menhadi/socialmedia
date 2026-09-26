@@ -48,7 +48,7 @@ class PublicationController extends Controller
         $publication = $publisher->run($request->user(), $post, $data);
 
         return redirect()->route('posts.publish', $post)->with('success', match ($publication->status) {
-            'published' => 'Published on Facebook. The result is saved below.',
+            'published' => $publication->video_path ? 'Video upload accepted by Facebook. Processing may take time; check its public link before assuming it is visible.' : 'Published on Facebook. The result is saved below.',
             'failed' => 'Facebook rejected the submission. Check the recorded error below.',
             'uncertain' => 'The outcome needs checking. Open your Facebook Page before taking further action.',
             default => 'This submission has already started. Its status is shown below.',

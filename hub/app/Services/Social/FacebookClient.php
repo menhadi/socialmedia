@@ -64,7 +64,14 @@ class FacebookClient
             $payload['link'] = $publication->link;
         }
         try {
-            if ($publication->image_path) {
+            if ($publication->video_path) {
+                $description = $publication->message;
+                if ($publication->link && ! str_contains($description, $publication->link)) {
+                    $description .= "\n\n".$publication->link;
+                }
+                $response = $this->request($account)->timeout(120)->attach('source', Storage::disk('local')->get($publication->video_path), 'post.mp4')
+                    ->post($publication->page_id.'/videos', ['description' => $description, 'published' => 'true', 'is_ai_generated' => 'true']);
+            } elseif ($publication->image_path) {
                 $caption = $publication->message;
                 if ($publication->link && ! str_contains($caption, $publication->link)) {
                     $caption .= "\n\n".$publication->link;
@@ -78,6 +85,14 @@ class FacebookClient
             throw new FacebookFailure('response', true);
         }
         $this->check($response);
+        if ($publication->video_path) {
+            $id = $response->json('id');
+            if (! is_string($id) || ! preg_match('/^[0-9]{1,64}$/D', $id)) {
+                throw new FacebookFailure('response', true);
+            }
+
+            return $id;
+        }
         $id = $response->json($publication->image_path ? 'post_id' : 'id');
         if (! is_string($id) || ! preg_match('/^'.preg_quote($publication->page_id, '/').'_[0-9]+$/D', $id) || strlen($id) > 255) {
             throw new FacebookFailure('response', true);

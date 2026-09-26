@@ -21,6 +21,7 @@ class AiClient
             ], ['Authorization' => 'Bearer '.$connection->api_key]],
             'deepseek' => ['https://api.deepseek.com/chat/completions', [
                 'model' => $model, 'messages' => $messages, 'max_tokens' => $limit, 'stream' => false,
+                'thinking' => ['type' => 'disabled'],
             ], ['Authorization' => 'Bearer '.$connection->api_key]],
             'anthropic' => ['https://api.anthropic.com/v1/messages', [
                 'model' => $model, 'system' => $prompt['system'], 'messages' => [['role' => 'user', 'content' => $prompt['user']]], 'max_tokens' => $limit,
@@ -108,6 +109,6 @@ class AiClient
         $input = $this->tokens(data_get($json, 'usageMetadata.promptTokenCount'));
         $total = $this->tokens(data_get($json, 'usageMetadata.totalTokenCount'));
 
-        return ['text' => implode("\n", $texts), 'input' => $input, 'output' => $total !== null && $input !== null && $total >= $input ? $total - $input : null, 'partial' => data_get($json,'candidates.0.finishReason') !== 'STOP'];
+        return ['text' => implode("\n", $texts), 'input' => $input, 'output' => $total !== null && $input !== null && $total >= $input ? $total - $input : null, 'partial' => data_get($json, 'candidates.0.finishReason') !== 'STOP'];
     }
 }

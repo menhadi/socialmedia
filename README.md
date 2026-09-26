@@ -156,7 +156,19 @@ For future updates, first test the intended commit and back up the production da
 
 Run each command only if the preceding command succeeds. Resume the scheduler after verifying the application. Never regenerate APP_KEY or replace `.env` during updates. If an update fails, keep this application in maintenance mode while investigating; recovery may require restoring the matching database backup as well as the previous code. These commands affect the separate Content Hub checkout and database; configuration changes must target only its subdomain.
 
-## References
+## AI images and short videos
+
+After deploying the media migration, open **AI providers → Image & video providers**. Configure Google Gemini image generation and/or Veo video generation with your own Google API key, model access, a conservative per-request cost estimate, daily budget, and request limit. Media generation starts disabled with zero budget. No key or media is committed to Git.
+
+Select an image and video provider separately in each application's edit screen. The existing text provider remains independent. From a saved post, choose **Create AI image or video**, enter visual direction, choose landscape/portrait (or square for images), and submit. Veo requests produce one eight-second 720p video; optionally use the attached image as its starting frame. The existing scheduler runs `hub:generate-media` every minute; no extra cron entry is needed. PHP GD is needed for validated PNG conversion.
+
+The media page shows queued, processing, completed, failed, and uncertain requests. Completed files are private previews/downloads until the owner chooses **Use this image/video**. This replaces the current attachment, clears review, and cancels queued publishing. Editing the post also clears attachments. Review again to publish or schedule to Facebook. Facebook video uploads may require processing before the public link becomes visible. Other social channels remain draft/download workflows.
+
+Research sources can select AI image or video generation alongside the researched draft. These media drafts require visual review before scheduling; exact-source automatic publishing with branded cards remains available. Media budgets are shared across the owner's applications per media service, independently of text budgets. One configured estimate is reserved per request; failed/uncertain submitted requests retain it and never automatically resubmit. Queued requests expire at the next UTC day without being submitted. Submitted video operations are polled using an encrypted key snapshot, removed when the job finishes. The configured estimate is not an invoice or a guaranteed provider billing cap.
+
+Provider documentation: [Gemini images](https://ai.google.dev/gemini-api/docs/image-generation), [Veo videos](https://ai.google.dev/gemini-api/docs/veo), [Google API pricing](https://ai.google.dev/gemini-api/docs/pricing). Real paid generation and Facebook video publication must be verified with configured live accounts after deployment; automated tests use fake provider responses.
+
+## API references
 
 - Laravel installation: https://laravel.com/docs/13.x/installation
 - OpenAI Responses: https://developers.openai.com/api/reference/cli/resources/responses/methods/create

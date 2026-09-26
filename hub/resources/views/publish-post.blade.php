@@ -6,6 +6,7 @@
     <section class="panel preview">
         <h2>Saved message</h2>
         <div class="post-body">{{ $post->body }}</div>
+        @if($post->video_path)<video controls preload="metadata" src="{{ route('posts.video',$post) }}" style="width:100%"></video><p>The video will be uploaded with the saved message as its description. Facebook may need time to process it.</p>@endif
         @if($post->image_path)<img src="{{ route('posts.image',$post) }}" alt="Image included in this Facebook post" style="width:100%;height:auto;border-radius:12px"><p class="muted small">This image will be attached. A shared link is included in the photo caption.</p>@endif
         <p class="muted small">{{ $post->image_path ? 'The title appears on the image.' : 'The internal title is not sent.' }} Facebook controls how the published post is displayed.</p>
     </section>

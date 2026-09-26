@@ -1,6 +1,7 @@
 @extends('layouts.app')
 @section('title','Research & automation')
 @section('content')
+<p class="notice">AI images and videos can be generated with researched drafts. Choose the media type below and configure an image/video provider in Applications. AI media always stays for visual review before publishing.</p>
 <div class="page-heading"><div><h1>From source to scheduled post.</h1><p class="muted">Connect websites, follow official notices and prepare content for each application.</p></div><a class="button secondary" href="{{ route('schedules') }}">Publishing queue</a></div>
 <div class="notice">Sources are checked on the server schedule. Automatic publishing is available for Facebook. Other channels produce drafts. A website URL reads that page only; add the specific notice pages, feeds or PDFs you want to follow.</div>
 <details class="panel form-panel"><summary><strong>Read an application’s website</strong></summary>
@@ -29,11 +30,12 @@
 <label>Automatic publishing delay (minutes)<input name="delay_minutes" type="number" min="15" max="10080" required value="{{ old('delay_minutes',$editing?->delay_minutes ?? 60) }}"></label>
 <label>Automatic destination<select name="social_account_id"><option value="">Choose a verified Facebook Page</option>@foreach($accounts as $account)<option value="{{ $account->id }}" @selected(old('social_account_id',$editing?->social_account_id)==$account->id)>{{ $account->brand->name }} · {{ $account->page_name }}</option>@endforeach</select></label>
 </div>
-<label class="checkbox"><input name="with_image" type="checkbox" value="1" @checked(old('with_image',$editing?->with_image ?? true))>Create a branded title image with each draft</label>
+<label>Media for researched drafts<select name="media_kind">@foreach(['branded'=>'Branded title card / no AI media','image'=>'Generate AI image (requires review)','video'=>'Generate 8-second AI video (requires review)'] as $value=>$label)<option value="{{ $value }}" @selected(old('media_kind',$editing?->media_kind ?? 'branded')===$value)>{{ $label }}</option>@endforeach</select></label>
+<label class="checkbox"><input name="with_image" type="checkbox" value="1" @checked(old('with_image',$editing?->with_image ?? true))>Create a branded title image when AI media is not selected</label>
 <label class="checkbox"><input name="enabled" type="checkbox" value="1" @checked(old('enabled',$editing?->enabled ?? false))>Enable recurring source checks and AI drafting</label>
 <label class="checkbox"><input name="official" type="checkbox" value="1" @checked(old('official',(bool)$editing?->approved_at))>I have checked this URL and approve it as an official source for this topic</label>
 <label class="checkbox"><input name="auto_publish" type="checkbox" value="1" @checked(old('auto_publish',$editing?->auto_publish ?? false))>Automatically publish eligible updates to the selected Page</label>
-<p class="muted small">The first capture stays in review. Later changes can publish exact headline and excerpt quotations when the notice date is within seven days, the evidence matches, and no concerns are flagged. AI rewrites and translations require review. Comparison pages must contain the same quotes for automatic publishing. Sources are checked again before submission. Images are branded title cards, not AI illustrations.</p>
+<p class="muted small">The first capture stays in review. Later changes can publish exact headline and excerpt quotations when the notice date is within seven days, the evidence matches, and no concerns are flagged. AI rewrites and translations require review. Comparison pages must contain the same quotes for automatic publishing. Sources are checked again before submission. Branded title cards can accompany automatic source posts. AI images and videos require visual review before scheduling.</p>
 <p class="muted small">Choose an enabled AI provider with a budget in the application settings. Each changed source can use one AI request. Saving source settings cancels its queued automatic posts.</p>
 <button class="button">{{ $editing ? 'Save source changes' : 'Add source' }}</button>
 @if($editing)<a class="button secondary" href="{{ route('research') }}">Cancel editing</a>@endif

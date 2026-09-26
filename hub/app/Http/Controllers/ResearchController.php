@@ -46,6 +46,7 @@ class ResearchController extends Controller
             'delay_minutes' => 'required|integer|min:15|max:10080',
             'social_account_id' => 'nullable|integer', 'enabled' => 'nullable|boolean',
             'auto_publish' => 'nullable|boolean', 'official' => 'nullable|boolean', 'with_image' => 'nullable|boolean',
+            'media_kind' => ['nullable', Rule::in(['branded', 'image', 'video'])],
         ]);
         try {
             $reader->validate($data['url']);
@@ -69,6 +70,7 @@ class ResearchController extends Controller
             throw ValidationException::withMessages(['url' => 'Use HTTPS source and comparison URLs for automatic publishing.']);
         }
         unset($data['official']);
+        $data['media_kind'] = $data['media_kind'] ?? 'branded';
         foreach (['enabled', 'auto_publish', 'with_image'] as $field) {
             $data[$field] = $request->boolean($field);
         }

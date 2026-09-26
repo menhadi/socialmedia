@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AiConnection;
 use App\Models\AiGeneration;
 use App\Models\Brand;
+use App\Models\MediaConnection;
 use App\Models\Post;
 use App\Models\SocialAccount;
 use Illuminate\Http\Request;
@@ -53,7 +54,8 @@ class HubController extends Controller
             $this->ownBrand($r, $brand);
         }
 
-        return view('brand-form', ['brand' => $brand ?? new Brand, 'connections' => $this->connections($r)]);
+        return view('brand-form', ['brand' => $brand ?? new Brand, 'connections' => $this->connections($r),
+            'mediaConnections' => MediaConnection::where('user_id', $r->user()->id)->get()]);
     }
 
     public function saveBrand(Request $r, ?Brand $brand = null)
@@ -64,6 +66,8 @@ class HubController extends Controller
         $data = $r->validate([
             'name' => 'required|string|max:150', 'website' => 'nullable|url:http,https|max:2048', 'description' => 'nullable|string|max:5000', 'audience' => 'nullable|string|max:2000', 'tone' => 'required|string|max:150', 'language' => 'required|string|max:100', 'instructions' => 'nullable|string|max:10000',
             'ai_connection_id' => ['nullable', Rule::exists('ai_connections', 'id')->where('user_id', $r->user()->id)],
+            'image_connection_id' => ['nullable', Rule::exists('media_connections', 'id')->where('user_id', $r->user()->id)->where('kind', 'image')],
+            'video_connection_id' => ['nullable', Rule::exists('media_connections', 'id')->where('user_id', $r->user()->id)->where('kind', 'video')],
         ]);
         $brand ??= new Brand;
         $brand->fill($data);
@@ -111,6 +115,8 @@ class HubController extends Controller
                 $post->schedules()->where('status', 'queued')->update(['status' => 'cancelled', 'reason' => 'Post edited; review and schedule the new version.']);
                 $post->image_path = null;
                 $post->image_hash = null;
+                $post->video_path = null;
+                $post->video_hash = null;
             } else {
                 $post = new Post;
             }

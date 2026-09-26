@@ -3,6 +3,7 @@
 use App\Http\Controllers\AiGenerationController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\HubController;
+use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\PublicationController;
 use App\Http\Controllers\ResearchController;
@@ -15,6 +16,13 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 });
 Route::middleware('auth')->group(function () {
+    Route::get('/media-providers', [MediaController::class, 'settings'])->name('media.settings');
+    Route::put('/media-providers/{kind}', [MediaController::class, 'saveSettings'])->name('media.settings.save');
+    Route::get('/posts/{post}/media', [MediaController::class, 'index'])->name('media');
+    Route::post('/posts/{post}/media', [MediaController::class, 'store'])->middleware('throttle:5,1')->name('media.store');
+    Route::get('/media/{generation}/file', [MediaController::class, 'file'])->name('media.file');
+    Route::post('/media/{generation}/attach', [MediaController::class, 'attach'])->name('media.attach');
+    Route::get('/posts/{post}/video', [MediaController::class, 'video'])->name('posts.video');
     Route::get('/research', [ResearchController::class, 'index'])->name('research');
     Route::post('/research', [ResearchController::class, 'save'])->name('research.store');
     Route::put('/research/{source}', [ResearchController::class, 'save'])->name('research.update');

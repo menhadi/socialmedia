@@ -34,7 +34,12 @@ class Post extends Model
 
     public function publishingFingerprint(): string
     {
-        return hash('sha256', json_encode([$this->id, $this->brand_id, $this->title, $this->channel, $this->body, $this->source_url, $this->reviewed_at?->toISOString(), $this->image_hash], JSON_THROW_ON_ERROR));
+        $parts = [$this->id, $this->brand_id, $this->title, $this->channel, $this->body, $this->source_url, $this->reviewed_at?->toISOString(), $this->image_hash];
+        if ($this->video_hash) {
+            $parts[] = $this->video_hash;
+        }
+
+        return hash('sha256', json_encode($parts, JSON_THROW_ON_ERROR));
     }
 
     public function assertEditable(): void

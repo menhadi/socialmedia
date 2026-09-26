@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\AiConnection;
 use App\Models\Brand;
 use App\Models\ContentSource;
+use App\Models\MediaConnection;
+use App\Models\MediaGeneration;
 use App\Models\Post;
 use App\Models\PostSchedule;
 use App\Models\Publication;
@@ -100,6 +102,22 @@ class ResearchWorkflowTest extends TestCase
         $this->put("/research/{$source->id}", [])->assertNotFound();
         $this->post("/research/brands/{$source->brand_id}/website")->assertNotFound();
         Http::assertNothingSent();
+    }
+
+    public function test_researched_ai_media_is_queued_but_requires_visual_review_before_publishing(): void
+    {
+        $source = $this->source(['enabled' => true, 'auto_publish' => true, 'approved_at' => now(), 'last_hash' => 'previous', 'media_kind' => 'image']);
+        $connection = MediaConnection::factory()->create(['user_id' => $source->brand->user_id]);
+        $source->brand->update(['image_connection_id' => $connection->id]);
+        $this->fakeResearch($this->package());
+
+        app(ResearchSource::class)->run($source->fresh());
+
+        $this->assertDatabaseCount('media_generations', 1);
+        $this->assertSame('queued', MediaGeneration::first()->status);
+        $this->assertSame('draft', Post::first()->status);
+        $this->assertDatabaseCount('post_schedules', 0);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'generativelanguage') || str_contains($request->url(), 'graph.facebook'));
     }
 
     public function test_automatic_setup_requires_official_approval_and_same_brand_verified_page(): void

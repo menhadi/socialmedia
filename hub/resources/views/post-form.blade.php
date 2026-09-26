@@ -28,8 +28,10 @@
                 @if($post->exists)
                     <div class="preview-brand"><span class="avatar">{{ mb_substr($post->brand->name,0,1) }}</span><div><strong>{{ $post->brand->name }}</strong><small>{{ \App\Models\Post::CHANNELS[$post->channel] }}</small></div></div>
                     <div class="post-body">{{ $post->body }}</div>
+                    @if($post->video_path)<video controls preload="metadata" src="{{ route('posts.video',$post) }}" style="width:100%"></video><p><a href="{{ route('posts.video',$post) }}" download>Download video</a></p>@endif
+                    @if(!$locked)<p><a class="button secondary" href="{{ route('media',$post) }}">Create AI image or video</a></p>@endif
                     @if($post->image_path)<img src="{{ route('posts.image',$post) }}" alt="Branded post image" style="width:100%;height:auto;border-radius:12px"><p><a href="{{ route('posts.image',$post) }}" download="post.png">Download image</a></p>@endif
-                    @if(!$locked)<form method="post" action="{{ route('posts.image.create',$post) }}">@csrf<button class="button secondary">{{ $post->image_path?'Regenerate':'Create' }} branded image</button></form><p class="muted small">Saving edits clears the old image and cancels a queued schedule. Create the image after your final edits.</p>@endif
+                    @if(!$locked)<form method="post" action="{{ route('posts.image.create',$post) }}">@csrf<button class="button secondary">{{ $post->image_path?'Regenerate':'Create' }} branded image</button></form><p class="muted small">Saving edits clears attached media and cancels a queued schedule. Generate media after your final edits.</p>@endif
                     @if($post->source_url)<a class="source-link" href="{{ $post->source_url }}" target="_blank" rel="noopener noreferrer">{{ $post->source_url }}</a>@endif
                     <p class="muted small">Preview shows the last saved version.</p>
                     @if($post->status==='draft' && !$locked)<form method="post" action="{{ route('posts.review',$post) }}">@csrf<button class="button secondary full">Mark saved version as reviewed</button></form>@endif

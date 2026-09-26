@@ -63,6 +63,10 @@ class PublishPost
                 || ! hash_equals($post->image_hash, hash('sha256', Storage::disk('local')->get($post->image_path))))) {
                 throw ValidationException::withMessages(['post' => 'The saved image is missing or changed. Regenerate it and review again.']);
             }
+            if ($post->video_path && (! Storage::disk('local')->exists($post->video_path)
+                || ! hash_equals($post->video_hash, hash('sha256', Storage::disk('local')->get($post->video_path))))) {
+                throw ValidationException::withMessages(['post' => 'The saved video is missing or changed. Generate it and review again.']);
+            }
             $publication = new Publication;
             $publication->forceFill([
                 'post_id' => $post->id, 'social_account_id' => $account->id,
@@ -71,6 +75,7 @@ class PublishPost
                 'message' => $post->body, 'link' => ($data['include_link'] ?? false) ? $post->source_url : null,
                 'status' => 'publishing',
                 'image_path' => $post->image_path,
+                'video_path' => $post->video_path,
             ])->save();
             $post->status = 'publishing';
             $post->save();

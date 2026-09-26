@@ -64,10 +64,10 @@ class AiGenerationTest extends TestCase
         $this->assertSame(20, $generation->output_tokens);
         $this->assertDatabaseCount('posts', 0);
         Http::assertSentCount(1);
-        Http::assertSent(function (Request $request) use ($header, $key, $limitField) {
+        Http::assertSent(function (Request $request) use ($header, $key, $limitField, $provider) {
             $data = json_encode($request->data(), JSON_UNESCAPED_UNICODE);
 
-            return $request->hasHeader($header, $key) && data_get($request->data(), $limitField) === 1200 && str_contains($data, 'Hindi') && str_contains($data, 'Selected application') && ! str_contains($data, 'Other brand private context') && ! str_contains($data, 'fake-test-key');
+            return ($provider !== 'deepseek' || data_get($request->data(), 'thinking.type') === 'disabled') && $request->hasHeader($header, $key) && data_get($request->data(), $limitField) === 1200 && str_contains($data, 'Hindi') && str_contains($data, 'Selected application') && ! str_contains($data, 'Other brand private context') && ! str_contains($data, 'fake-test-key');
         });
         $this->get('/ai-assistant/'.$generation->id)->assertSee('नमस्ते दुनिया')->assertDontSee('private reasoning');
     }

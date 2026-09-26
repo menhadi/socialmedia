@@ -1,6 +1,7 @@
 @extends('layouts.app')
 @section('title','AI providers')
 @section('content')
+<p><a class="button secondary" href="{{ route('media.settings') }}">Image & video providers →</a></p>
 <div class="page-heading"><div><div class="eyebrow">YOUR CHOICE OF AI</div><h1>A little help. On your terms.</h1><p class="muted">Choose your model, set limits and enable generation when you’re ready.</p></div><a class="button secondary" href="{{ route('ai') }}">Open AI assistant →</a></div>
 <div class="notice"><strong>Start small</strong><p>Keys are stored encrypted. Saving settings makes no API call. To enable generation, enter the model’s current input/output prices and your daily limits. Budget checks are estimates, not a guaranteed billing cap; set billing limits with your provider too.</p></div>
 <div class="cards provider-grid">
