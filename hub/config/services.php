@@ -3,6 +3,7 @@
 return [
 
     'facebook' => ['version' => env('FACEBOOK_GRAPH_VERSION', 'v25.0')],
+    'linkedin' => ['version' => env('LINKEDIN_API_VERSION', '202606')],
 
     /*
     |--------------------------------------------------------------------------

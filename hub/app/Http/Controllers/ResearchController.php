@@ -24,7 +24,7 @@ class ResearchController extends Controller
     {
         $brands = Brand::where('user_id', $request->user()->id)->orderBy('name')->get();
         $sources = ContentSource::whereIn('brand_id', $brands->pluck('id'))->with('brand')->latest()->get();
-        $accounts = SocialAccount::whereIn('brand_id', $brands->pluck('id'))->where('provider', 'facebook')->whereNotNull('verified_at')->get();
+        $accounts = SocialAccount::whereIn('brand_id', $brands->pluck('id'))->whereIn('provider', ['facebook', 'instagram', 'linkedin', 'x'])->whereNotNull('verified_at')->get();
         $editing = $request->filled('edit') ? $sources->firstWhere('id', $request->integer('edit')) : null;
         $snapshots = SourceSnapshot::whereIn('content_source_id', $sources->pluck('id'))->with(['source.brand', 'post'])->latest()->paginate(12);
 
@@ -59,11 +59,11 @@ class ResearchController extends Controller
         if ($source && (int) $data['brand_id'] !== $source->brand_id) {
             throw ValidationException::withMessages(['brand_id' => 'Create a separate source for another application.']);
         }
-        if (! empty($data['social_account_id']) && ! SocialAccount::whereKey($data['social_account_id'])->where('brand_id', $data['brand_id'])->where('provider', 'facebook')->whereNotNull('verified_at')->exists()) {
-            throw ValidationException::withMessages(['social_account_id' => 'Choose a verified Page belonging to this application.']);
+        if (! empty($data['social_account_id']) && ! SocialAccount::whereKey($data['social_account_id'])->where('brand_id', $data['brand_id'])->where('provider', $data['channel'])->whereNotNull('verified_at')->exists()) {
+            throw ValidationException::withMessages(['social_account_id' => 'Choose a verified account matching this channel and belonging to this application.']);
         }
-        if ($request->boolean('auto_publish') && (! $request->boolean('official') || ! $request->boolean('enabled') || empty($data['social_account_id']) || $data['channel'] !== 'facebook')) {
-            throw ValidationException::withMessages(['auto_publish' => 'Automatic publishing requires an enabled, approved official source and a verified Facebook Page.']);
+        if ($request->boolean('auto_publish') && (! $request->boolean('official') || ! $request->boolean('enabled') || empty($data['social_account_id']) || ! in_array($data['channel'], ['facebook', 'instagram', 'linkedin', 'x'], true))) {
+            throw ValidationException::withMessages(['auto_publish' => 'Automatic publishing requires an enabled, approved official source and a verified matching account. YouTube and WhatsApp require manual audience or recipient settings.']);
         }
         if ($request->boolean('auto_publish') && (parse_url($data['url'], PHP_URL_SCHEME) !== 'https'
             || (! empty($data['comparison_url']) && parse_url($data['comparison_url'], PHP_URL_SCHEME) !== 'https'))) {

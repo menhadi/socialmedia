@@ -5,7 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Post;
 use App\Models\Publication;
 use App\Models\SocialAccount;
-use App\Services\Social\FacebookClient;
+use App\Services\Social\ChannelRules;
+use App\Services\Social\PlatformClient;
 use App\Services\Social\PublishPost;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -22,11 +23,11 @@ class PublicationController extends Controller
     public function preview(Request $request, Post $post): View
     {
         $this->own($request, $post);
-        $accounts = SocialAccount::where('brand_id', $post->brand_id)->where('provider', 'facebook')
+        $accounts = SocialAccount::where('brand_id', $post->brand_id)->where('provider', $post->channel)
             ->whereNotNull('verified_at')->whereNotNull('access_token')->orderBy('page_name')->get();
         $publications = $post->publications()->latest()->get();
-        $activeSchedule = $post->schedules()->whereIn('status', ['queued', 'running', 'uncertain'])->first();
-        $ready = $post->status === 'reviewed' && $post->reviewed_at && $post->channel === 'facebook'
+        $activeSchedule = $post->schedules()->whereIn('status', ['queued', 'running', 'processing', 'uncertain'])->first();
+        $ready = $post->status === 'reviewed' && $post->reviewed_at && ChannelRules::supported($post->channel)
             && ! $publications->contains(fn (Publication $publication): bool => in_array($publication->status, ['publishing', 'published', 'uncertain'], true));
 
         return view('publish-post', [
@@ -43,25 +44,25 @@ class PublicationController extends Controller
             'request_key' => 'required|uuid',
             'fingerprint' => 'required|string|size:64',
             'include_link' => 'nullable|boolean',
-            'confirm' => 'accepted',
+            'confirm' => 'accepted', 'options' => 'nullable|array',
         ]);
         $publication = $publisher->run($request->user(), $post, $data);
 
         return redirect()->route('posts.publish', $post)->with('success', match ($publication->status) {
-            'published' => $publication->video_path ? 'Video upload accepted by Facebook. Processing may take time; check its public link before assuming it is visible.' : 'Published on Facebook. The result is saved below.',
-            'failed' => 'Facebook rejected the submission. Check the recorded error below.',
-            'uncertain' => 'The outcome needs checking. Open your Facebook Page before taking further action.',
+            'published' => 'The platform accepted this submission. Video processing and message delivery may still be pending. See the recorded result below.',
+            'failed' => 'The platform rejected the submission. Check the recorded error below.',
+            'uncertain' => 'The outcome needs checking. Check the destination account before taking further action.',
             default => 'This submission has already started. Its status is shown below.',
         });
     }
 
-    public function refreshLink(Request $request, Publication $publication, FacebookClient $client): RedirectResponse
+    public function refreshLink(Request $request, Publication $publication, PlatformClient $client): RedirectResponse
     {
         $this->own($request, $publication->post);
         abort_unless($publication->status === 'published' && $publication->remote_post_id, 422);
         $account = $publication->account;
         if (! $account->access_token) {
-            return back()->withErrors(['connection' => 'Save and verify a Page token in Social accounts first.']);
+            return back()->withErrors(['connection' => 'Save and verify an access token in Social accounts first.']);
         }
         $url = $client->permalink($account, $publication->remote_post_id);
         if (! $url) {

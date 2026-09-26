@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Brand;
 use App\Models\SocialAccount;
 use App\Services\Social\AccountSetup;
-use App\Services\Social\FacebookClient;
 use App\Services\Social\FacebookFailure;
+use App\Services\Social\PlatformClient;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -64,7 +64,7 @@ class SocialAccountController extends Controller
 
         return redirect()->route('social', ['provider' => $provider])->with('success', $provider === 'facebook'
             ? 'Page setup saved. Add a token and verify its identity before publishing.'
-            : 'Account setup saved. Connection testing and posting will be added later. No external request was made.');
+            : 'Account setup saved. Add a token and verify the account before publishing.');
     }
 
     public function update(Request $request, SocialAccount $account): RedirectResponse
@@ -110,17 +110,14 @@ class SocialAccountController extends Controller
 
         return back()->with('success', $account->provider === 'facebook'
             ? 'Setup saved. If you changed the Page ID or token, verify the Page again before publishing.'
-            : 'Setup saved for later testing. Posting is not enabled for this account.');
+            : 'Setup saved. Verify the account after changing credentials or its identity.');
     }
 
-    public function verify(Request $request, SocialAccount $account, FacebookClient $client): RedirectResponse
+    public function verify(Request $request, SocialAccount $account, PlatformClient $client): RedirectResponse
     {
         $this->own($request, $account);
-        if ($account->provider !== 'facebook') {
-            return back()->withErrors(['connection' => 'This account is saved for later testing. Connection checks and posting are not enabled for this platform yet.']);
-        }
         if (! $account->access_token) {
-            throw ValidationException::withMessages(['access_token' => 'Save a Page access token first.']);
+            throw ValidationException::withMessages(['access_token' => 'Save an access token first.']);
         }
         $name = null;
         $error = null;
@@ -147,7 +144,7 @@ class SocialAccountController extends Controller
             return back()->withErrors(['connection' => FacebookFailure::description($error)]);
         }
 
-        return back()->with('success', 'Page identity verified: '.$name.'. Publishing still requires the appropriate Meta permissions.');
+        return back()->with('success', 'Account identity verified: '.$name.'. Publishing still requires the platform’s publishing permissions.');
     }
 
     public function disconnect(Request $request, SocialAccount $account): RedirectResponse

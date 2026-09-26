@@ -36,7 +36,7 @@ class HubController extends Controller
         $posts = Post::whereIn('brand_id', $brands->pluck('id'))->with('brand')->latest()->limit(6)->get();
 
         $savedAccounts = SocialAccount::whereIn('brand_id', $brands->pluck('id'))->count();
-        $connectedPages = SocialAccount::whereIn('brand_id', $brands->pluck('id'))->where('provider', 'facebook')->whereNotNull('verified_at')->whereNotNull('access_token')->count();
+        $connectedPages = SocialAccount::whereIn('brand_id', $brands->pluck('id'))->whereNotNull('verified_at')->whereNotNull('access_token')->count();
 
         return view('dashboard', compact('brands', 'posts', 'connectedPages', 'savedAccounts'));
     }

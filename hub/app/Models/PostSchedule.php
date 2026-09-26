@@ -11,7 +11,7 @@ class PostSchedule extends Model
 
     protected function casts(): array
     {
-        return ['scheduled_at' => 'datetime', 'started_at' => 'datetime', 'automatic' => 'boolean', 'include_link' => 'boolean'];
+        return ['scheduled_at' => 'datetime', 'started_at' => 'datetime', 'automatic' => 'boolean', 'include_link' => 'boolean', 'options' => 'encrypted:array'];
     }
 
     public function post(): BelongsTo

@@ -2,7 +2,7 @@
 @section('title','AI images & video')
 @section('content')
 <a href="{{ route('posts.edit',$post) }}">← Saved post</a><h1>Create the visual.</h1>
-<p>{{ $post->brand->name }} · {{ $post->title }}</p>
+<p>{{ $post->brand->name }} · {{ $post->title }} · {{ \App\Models\Post::CHANNELS[$post->channel] }}</p><p class="muted">Images and videos can be created for every channel. Use square images for Instagram feeds and portrait video for Reels or Shorts. Review and attach the result before opening the publishing preview.</p>
 <p><a href="{{ route('media.settings') }}">Media providers & budgets</a> · <a href="{{ route('applications.edit',$post->brand) }}">Application preferences</a></p>
 <form class="panel form-panel" method="post" action="{{ route('media.store',$post) }}">@csrf
 <input type="hidden" name="request_key" value="{{ (string) \Illuminate\Support\Str::uuid() }}"><input type="hidden" name="fingerprint" value="{{ $post->publishingFingerprint() }}">

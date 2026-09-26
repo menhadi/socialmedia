@@ -62,7 +62,7 @@ class CreateSourceDraft
 
                 return;
             }
-            $automatic = $reason === null && $source->enabled && $source->auto_publish && $source->channel === 'facebook';
+            $automatic = $reason === null && $source->enabled && $source->auto_publish && in_array($source->channel, ['facebook', 'instagram', 'linkedin', 'x'], true);
             $hashtags = array_filter($package['hashtags'], fn ($tag) => is_string($tag) && preg_match('/^#[\p{L}\p{N}_]{1,40}$/uD', $tag));
             $body = $automatic ? $headline."\n\n".$excerpt."\n\nSource: ".$snapshot->url
                 : trim($package['caption'])."\n\n".implode(' ', array_slice($hashtags, 0, 5))."\n\nSource: ".$snapshot->url;

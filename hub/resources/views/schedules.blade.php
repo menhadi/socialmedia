@@ -12,6 +12,6 @@
 <div class="actions"><a class="button secondary" href="{{ route('posts.publish',$schedule->post) }}">Post & publishing history</a>
 @if($schedule->status==='queued')<form method="post" action="{{ route('schedules.cancel',$schedule) }}">@csrf<button class="button secondary">Cancel schedule</button></form>@endif
 </div></section>
-@empty<div class="panel empty"><h2>No scheduled posts yet.</h2><p>Review a Facebook post, then open its publishing preview to choose a date and time.</p><a href="{{ route('posts') }}">Open posts →</a></div>@endforelse
+@empty<div class="panel empty"><h2>No scheduled posts yet.</h2><p>Review a post, then open its publishing preview to choose a date and time.</p><a href="{{ route('posts') }}">Open posts →</a></div>@endforelse
 {{ $schedules->links() }}
 @endsection

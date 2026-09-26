@@ -44,11 +44,11 @@ class Post extends Model
 
     public function assertEditable(): void
     {
-        if ($this->schedules()->whereIn('status', ['running', 'uncertain'])->exists()) {
+        if ($this->schedules()->whereIn('status', ['running', 'processing', 'uncertain'])->exists()) {
             throw ValidationException::withMessages(['post' => 'A scheduled submission is running. Check the schedule before editing.']);
         }
         if (! in_array($this->status, ['draft', 'reviewed'], true) || $this->publications()->whereIn('status', ['publishing', 'published', 'uncertain'])->exists()) {
-            throw ValidationException::withMessages(['post' => 'This post has been submitted to Facebook and cannot be edited or submitted again. Check its publishing history below.']);
+            throw ValidationException::withMessages(['post' => 'This post has been submitted to the platform and cannot be edited or submitted again. Check its publishing history below.']);
         }
     }
 }

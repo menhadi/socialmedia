@@ -17,20 +17,20 @@ class SchedulePost
 {
     public function __construct(private FetchSource $reader, private PublishPost $publisher) {}
 
-    public function create(Post $post, int $accountId, \DateTimeInterface $when, bool $includeLink = true, ?SourceSnapshot $automaticSnapshot = null): PostSchedule
+    public function create(Post $post, int $accountId, \DateTimeInterface $when, bool $includeLink = true, ?SourceSnapshot $automaticSnapshot = null, array $options = []): PostSchedule
     {
-        return DB::transaction(function () use ($post, $accountId, $when, $includeLink, $automaticSnapshot): PostSchedule {
+        return DB::transaction(function () use ($post, $accountId, $when, $includeLink, $automaticSnapshot, $options): PostSchedule {
             $post = Post::whereKey($post->id)->lockForUpdate()->firstOrFail();
             $post->assertEditable();
-            if ($post->status !== 'reviewed' || ! $post->reviewed_at || $post->channel !== 'facebook') {
-                throw ValidationException::withMessages(['schedule' => 'Review a Facebook draft before scheduling.']);
+            if ($post->status !== 'reviewed' || ! $post->reviewed_at || ! ChannelRules::supported($post->channel)) {
+                throw ValidationException::withMessages(['schedule' => 'Review a draft before scheduling.']);
             }
-            if ($post->schedules()->whereIn('status', ['queued', 'running'])->exists()) {
+            if ($post->schedules()->whereIn('status', ['queued', 'running', 'processing'])->exists()) {
                 throw ValidationException::withMessages(['schedule' => 'This post already has an active schedule. Cancel it first.']);
             }
-            $account = SocialAccount::whereKey($accountId)->where('brand_id', $post->brand_id)->where('provider', 'facebook')->first();
+            $account = SocialAccount::whereKey($accountId)->where('brand_id', $post->brand_id)->where('provider', $post->channel)->first();
             if (! $account || ! $account->verified_at || ! $account->access_token) {
-                throw ValidationException::withMessages(['schedule' => 'Select a verified Facebook Page for this application.']);
+                throw ValidationException::withMessages(['schedule' => 'Select a verified account for this application.']);
             }
             if ($automaticSnapshot) {
                 $source = ContentSource::whereKey($automaticSnapshot->content_source_id)->lockForUpdate()->firstOrFail();
@@ -40,7 +40,11 @@ class SchedulePost
                 }
             }
 
+            $options = ChannelRules::options($post->channel, $options);
+            ChannelRules::validate($post, $includeLink, $options, $when);
+
             return $post->schedules()->create([
+                'options' => $options,
                 'social_account_id' => $accountId, 'source_snapshot_id' => $automaticSnapshot?->id,
                 'automatic' => $automaticSnapshot !== null, 'request_key' => (string) Str::uuid(),
                 'fingerprint' => $post->publishingFingerprint(), 'credential_version' => $account->credential_version,
@@ -68,7 +72,7 @@ class SchedulePost
             }
             $account = SocialAccount::find($schedule->social_account_id);
             if (! $account || $account->credential_version !== $schedule->credential_version || ! $account->verified_at) {
-                throw new \RuntimeException('The Page connection changed. Verify it and create a new schedule.');
+                throw new \RuntimeException('The account connection changed. Verify it and create a new schedule.');
             }
             if ($schedule->automatic) {
                 $snapshot = $schedule->snapshot;
@@ -87,12 +91,12 @@ class SchedulePost
             $publication = $this->publisher->run(User::findOrFail($post->brand->user_id), $post, [
                 'social_account_id' => $schedule->social_account_id, 'request_key' => $schedule->request_key,
                 'fingerprint' => $schedule->fingerprint, 'include_link' => $schedule->include_link,
-                'schedule_id' => $schedule->id, 'credential_version' => $schedule->credential_version,
+                'options' => $schedule->options ?? [], 'schedule_id' => $schedule->id, 'credential_version' => $schedule->credential_version,
             ]);
-            $schedule->update(['status' => $publication->status === 'publishing' ? 'uncertain' : $publication->status,
+            $schedule->update(['status' => $publication->status === 'publishing' ? 'processing' : $publication->status,
                 'reason' => $publication->status === 'published' ? null : 'Check publishing history. No automatic retry will be made.']);
         } catch (\Throwable) {
-            $schedule->update(['status' => 'blocked', 'reason' => 'Publishing held: content, source evidence, approval or Page credentials changed, or a check failed. Review before scheduling again.']);
+            $schedule->update(['status' => 'blocked', 'reason' => 'Publishing held: content, source evidence, approval or account credentials changed, or a check failed. Review before scheduling again.']);
         }
     }
 }

@@ -48,7 +48,7 @@ class SocialAccountSetupTest extends TestCase
     public function test_platform_setup_can_be_saved_without_credentials_and_remains_untested(string $provider, string $id, array $settings): void
     {
         $brand = $this->brand();
-        $this->get('/social-accounts?provider='.$provider)->assertOk()->assertSee('Setup now, test later');
+        $this->get('/social-accounts?provider='.$provider)->assertOk()->assertSee('Verify when you are ready');
         $payload = ['provider' => $provider, 'brand_id' => $brand->id, 'page_id' => $id, 'display_name' => 'My saved account'] + $settings;
         $this->post('/social-accounts', $payload)->assertSessionHasNoErrors()->assertRedirect(route('social', ['provider' => $provider]));
         $account = SocialAccount::firstOrFail();
@@ -59,14 +59,14 @@ class SocialAccountSetupTest extends TestCase
         $this->assertSame($settings, $account->settings);
         $this->assertNull($account->access_token);
         $this->assertNull($account->verified_at);
-        $this->get('/social-accounts')->assertSee('My saved account')->assertSee('Not tested')->assertSee('Awaiting credentials')->assertSee('Posting not enabled')->assertDontSee(route('social.verify', $account), false);
+        $this->get('/social-accounts')->assertSee('My saved account')->assertSee('Not tested')->assertSee('Awaiting credentials')->assertSee('Publishing available')->assertDontSee(route('social.verify', $account), false);
         $this->post('/social-accounts', $payload)->assertSessionHasErrors('page_id');
         $this->assertDatabaseCount('social_accounts', 1);
         Http::assertNothingSent();
     }
 
     #[DataProvider('platforms')]
-    public function test_each_platform_encrypts_tokens_and_blocks_connection_testing(string $provider, string $id, array $settings): void
+    public function test_each_platform_encrypts_tokens_and_rejects_invalid_credentials(string $provider, string $id, array $settings): void
     {
         $brand = $this->brand();
         $this->post('/social-accounts', ['provider' => $provider, 'brand_id' => $brand->id, 'page_id' => $id, 'access_token' => 'private-token', 'verified_at' => now(), 'page_name' => 'Forged verification'] + $settings)->assertSessionHasNoErrors();
@@ -76,9 +76,10 @@ class SocialAccountSetupTest extends TestCase
         $this->assertNull($account->page_name);
         $this->assertNotSame('private-token', DB::table('social_accounts')->value('access_token'));
         $this->assertArrayNotHasKey('access_token', $account->toArray());
+        Http::fake(['*' => Http::response(['error' => ['message' => 'Invalid token']], 401)]);
         $this->post("/social-accounts/{$account->id}/verify")->assertSessionHasErrors('connection');
-        $this->get('/social-accounts')->assertOk()->assertSee('Credentials saved')->assertDontSee('private-token')->assertDontSee('Identity verified')->assertDontSee(route('social.verify', $account), false);
-        Http::assertNothingSent();
+        $this->get('/social-accounts')->assertOk()->assertSee('Credentials saved')->assertDontSee('private-token')->assertDontSee('Identity verified')->assertSee(route('social.verify', $account), false);
+        Http::assertSentCount(1);
     }
 
     public static function invalidIds(): array
@@ -157,15 +158,15 @@ class SocialAccountSetupTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_whatsapp_hindi_content_can_be_saved_and_reviewed_but_not_sent(): void
+    public function test_whatsapp_hindi_draft_needs_credentials_and_recipient_before_sending(): void
     {
         $brand = $this->brand();
         $account = SocialAccount::factory()->create(['brand_id' => $brand->id, 'provider' => 'whatsapp', 'verified_at' => null]);
         $this->post('/posts', ['brand_id' => $brand->id, 'title' => 'Hindi update', 'body' => 'नमस्ते! आपका स्वागत है।', 'channel' => 'whatsapp'])->assertSessionHasNoErrors();
         $post = Post::firstOrFail();
         $this->post("/posts/{$post->id}/review")->assertSessionHasNoErrors();
-        $this->get("/posts/{$post->id}/publish")->assertOk()->assertSee('Posting for WhatsApp Business will be added later.')->assertDontSee('Publish now');
-        $this->post("/posts/{$post->id}/publish", ['social_account_id' => $account->id, 'request_key' => (string) Str::uuid(), 'fingerprint' => $post->fresh()->publishingFingerprint(), 'confirm' => '1'])->assertSessionHasErrors('post');
+        $this->get("/posts/{$post->id}/publish")->assertOk()->assertSee('Connect an account first')->assertDontSee('Publish now');
+        $this->post("/posts/{$post->id}/publish", ['social_account_id' => $account->id, 'request_key' => (string) Str::uuid(), 'fingerprint' => $post->fresh()->publishingFingerprint(), 'confirm' => '1'])->assertSessionHasErrors('recipient');
         $this->assertSame('reviewed', $post->fresh()->status);
         $this->assertSame('whatsapp', $post->fresh()->channel);
         $this->assertSame('नमस्ते! आपका स्वागत है।', $post->fresh()->body);
@@ -192,7 +193,7 @@ class SocialAccountSetupTest extends TestCase
         $this->put("/social-accounts/{$account->id}", ['page_id' => $account->page_id, 'display_name' => '<script>alert(1)</script>', 'access_token' => ''])->assertSessionHasNoErrors();
         $this->assertNotNull($account->fresh()->verified_at);
         $this->get('/social-accounts')->assertOk()->assertSee('&lt;script&gt;', false)->assertDontSee('<script>alert(1)</script>', false);
-        $this->get('/')->assertOk()->assertSee('Social accounts saved')->assertSee('1 Facebook Pages verified');
+        $this->get('/')->assertOk()->assertSee('Social accounts saved')->assertSee('1 accounts verified');
         Http::assertNothingSent();
     }
 

@@ -7,7 +7,7 @@
     <div class="panel empty"><h2>Add an application first.</h2><p>Every post belongs to an application, keeping its audience and voice clear.</p><a class="button" href="{{ route('applications.create') }}">Add application</a></div>
 @else
     @if(!$locked)<p><a class="button secondary" href="{{ route('ai', $post->exists?['post'=>$post->id]:[]) }}">✧ Open AI assistant</a></p>@endif
-    @if($locked)<div class="notice">This saved version has been submitted to Facebook and is locked. <a href="{{ route('posts.publish',$post) }}">View publishing history →</a></div>@endif
+    @if($locked)<div class="notice">This saved version has been submitted for publishing and is locked. <a href="{{ route('posts.publish',$post) }}">View publishing history →</a></div>@endif
     <div class="editor-grid">
         <form class="panel form-panel" method="post" action="{{ $post->exists?route('posts.update',$post):route('posts.store') }}">
             @csrf @if($post->exists) @method('PUT') @endif
@@ -16,7 +16,7 @@
                     <label>Application<select name="brand_id" required>@foreach($brands as $brand)<option value="{{ $brand->id }}" @selected(old('brand_id',$post->brand_id)==$brand->id)>{{ $brand->name }}</option>@endforeach</select></label>
                     <label>Intended channel<select name="channel">@foreach(\App\Models\Post::CHANNELS as $value=>$label)<option value="{{ $value }}" @selected(old('channel',$post->channel)==$value)>{{ $label }}</option>@endforeach</select></label>
                 </div>
-                <label>Internal title<input name="title" required maxlength="200" value="{{ old('title',$post->title) }}" placeholder="A name to find this post later"></label>
+                <label>Title (also sent as the YouTube video title)<input name="title" required maxlength="200" value="{{ old('title',$post->title) }}" placeholder="A name to find this post later"></label>
                 <label>Post content<textarea name="body" rows="12" required maxlength="20000" placeholder="What would you like to share?">{{ old('body',$post->body) }}</textarea></label>
                 <label>Source or destination link<input name="source_url" type="url" maxlength="2048" value="{{ old('source_url',$post->source_url) }}" placeholder="https://"></label>
                 @if(!$locked)<p class="muted small">Editing a reviewed post returns it to draft for another review.</p><div class="actions"><button class="button">Save draft</button></div>@endif
@@ -40,13 +40,13 @@
                 @endif
             </div>
             <div class="notice">
-                <strong>Facebook publishing</strong>
-                @if($post->exists && $post->channel==='facebook')
-                    <p>Review the saved version, then choose a verified Page for this application. You can choose whether to share the saved link.</p>
+                <strong>Channel publishing</strong>
+                @if($post->exists && \App\Services\Social\ChannelRules::supported($post->channel))
+                    <p>Review the saved version, then choose a verified account for this application. You can choose whether to share the saved link.</p>
                     <p><a class="button secondary full" href="{{ route('posts.publish',$post) }}">{{ $locked?'View publishing history':'Open publishing preview' }}</a></p>
                 @else
-                    <p>Facebook text and link posts are supported. Other channels can be used for drafts while their connections are added.</p>
-                    <p><a href="{{ route('social') }}">Manage Page connections →</a></p>
+                    <p>Choose a channel, create your text and media, then review and publish or schedule it. YouTube needs a video; WhatsApp needs a recipient.</p>
+                    <p><a href="{{ route('social') }}">Manage account connections →</a></p>
                 @endif
             </div>
         </aside>

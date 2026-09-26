@@ -1,5 +1,6 @@
 <label>Account label <span>optional</span><input name="display_name" maxlength="100" value="{{ $editing ? $account->display_name : old('display_name') }}" placeholder="A name to recognize this account"></label>
 @if($platform==='instagram')
+    <label>Token login method<select name="login_method">@foreach(['facebook'=>'Facebook Login (linked Page)','instagram'=>'Instagram Login'] as $value=>$label)<option value="{{ $value }}" @selected(($editing ? ($account->settings['login_method'] ?? 'facebook') : old('login_method','facebook'))===$value)>{{ $label }}</option>@endforeach</select></label>
     <label>Linked Facebook Page ID <span>optional</span><input name="facebook_page_id" inputmode="numeric" pattern="[0-9]{1,50}" maxlength="50" value="{{ $editing ? ($account->settings['facebook_page_id'] ?? '') : old('facebook_page_id') }}" placeholder="For accounts using Facebook Login"></label>
 @endif
 @if($platform==='whatsapp')

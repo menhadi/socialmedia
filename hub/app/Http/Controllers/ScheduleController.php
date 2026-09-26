@@ -31,7 +31,7 @@ class ScheduleController extends Controller
         $data = $request->validate([
             'social_account_id' => 'required|integer', 'scheduled_at' => 'required|date_format:Y-m-d\TH:i',
             'timezone' => 'required|timezone', 'fingerprint' => 'required|string|size:64',
-            'include_link' => 'nullable|boolean', 'confirm' => 'accepted',
+            'include_link' => 'nullable|boolean', 'confirm' => 'accepted', 'options' => 'nullable|array',
         ]);
         $when = CarbonImmutable::createFromFormat('Y-m-d\TH:i', $data['scheduled_at'], $data['timezone'])->setSecond(0)->utc();
         if ($when->lessThan(now()->addMinute()) || $when->greaterThan(now()->addDays(90))) {
@@ -42,7 +42,7 @@ class ScheduleController extends Controller
             if (! hash_equals($post->publishingFingerprint(), $data['fingerprint'])) {
                 throw ValidationException::withMessages(['post' => 'This post changed. Open a fresh publishing preview.']);
             }
-            $service->create($post, (int) $data['social_account_id'], $when, $request->boolean('include_link'));
+            $service->create($post, (int) $data['social_account_id'], $when, $request->boolean('include_link'), options: $data['options'] ?? []);
         });
 
         return redirect()->route('schedules')->with('success', 'Post scheduled. The server scheduler will publish it when due.');

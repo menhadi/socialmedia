@@ -3,7 +3,7 @@
 @section('content')
 <p class="notice">AI images and videos can be generated with researched drafts. Choose the media type below and configure an image/video provider in Applications. AI media always stays for visual review before publishing.</p>
 <div class="page-heading"><div><h1>From source to scheduled post.</h1><p class="muted">Connect websites, follow official notices and prepare content for each application.</p></div><a class="button secondary" href="{{ route('schedules') }}">Publishing queue</a></div>
-<div class="notice">Sources are checked on the server schedule. Automatic publishing is available for Facebook. Other channels produce drafts. A website URL reads that page only; add the specific notice pages, feeds or PDFs you want to follow.</div>
+<div class="notice">Sources are checked on the server schedule. Approved sources can schedule Facebook, Instagram, LinkedIn and X posts when channel requirements are met. AI visuals need review. YouTube and WhatsApp drafts need audience or recipient settings before scheduling. A website URL reads that page only; add the specific notice pages, feeds or PDFs you want to follow.</div>
 <details class="panel form-panel"><summary><strong>Read an application’s website</strong></summary>
 @forelse($brands as $brand)
 <div class="section-heading"><div><h3>{{ $brand->name }}</h3><p class="muted small">{{ $brand->website ?: 'Set a website in Applications first.' }}</p></div>
@@ -28,7 +28,7 @@
 <label>Channel<select name="channel">@foreach(\App\Models\Post::CHANNELS as $key=>$label)<option value="{{ $key }}" @selected(old('channel',$editing?->channel ?? 'facebook')===$key)>{{ $label }}</option>@endforeach</select></label>
 <label>Check every<select name="interval_minutes">@foreach([60=>'Hour',180=>'3 hours',360=>'6 hours',1440=>'Day'] as $value=>$label)<option value="{{ $value }}" @selected(old('interval_minutes',$editing?->interval_minutes ?? 60)==$value)>{{ $label }}</option>@endforeach</select></label>
 <label>Automatic publishing delay (minutes)<input name="delay_minutes" type="number" min="15" max="10080" required value="{{ old('delay_minutes',$editing?->delay_minutes ?? 60) }}"></label>
-<label>Automatic destination<select name="social_account_id"><option value="">Choose a verified Facebook Page</option>@foreach($accounts as $account)<option value="{{ $account->id }}" @selected(old('social_account_id',$editing?->social_account_id)==$account->id)>{{ $account->brand->name }} · {{ $account->page_name }}</option>@endforeach</select></label>
+<label>Automatic destination<select name="social_account_id"><option value="">Choose a verified matching account</option>@foreach($accounts as $account)<option value="{{ $account->id }}" @selected(old('social_account_id',$editing?->social_account_id)==$account->id)>{{ $account->brand->name }} · {{ $account->page_name }} · {{ $account->provider }}</option>@endforeach</select></label>
 </div>
 <label>Media for researched drafts<select name="media_kind">@foreach(['branded'=>'Branded title card / no AI media','image'=>'Generate AI image (requires review)','video'=>'Generate 8-second AI video (requires review)'] as $value=>$label)<option value="{{ $value }}" @selected(old('media_kind',$editing?->media_kind ?? 'branded')===$value)>{{ $label }}</option>@endforeach</select></label>
 <label class="checkbox"><input name="with_image" type="checkbox" value="1" @checked(old('with_image',$editing?->with_image ?? true))>Create a branded title image when AI media is not selected</label>

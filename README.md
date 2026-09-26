@@ -19,7 +19,7 @@ A general-purpose social content workspace. The Laravel application is in [hub](
 - Reviewed Facebook text/link publishing, explicit destination confirmation, optional link sharing, public links and immutable submission history.
 - Duplicate protection: successful and uncertain submissions lock the saved post against editing and resubmission.
 - Account setup for Instagram professional accounts, LinkedIn members/organizations, X, YouTube channels and WhatsApp Business Cloud API senders. Account labels and platform-specific IDs are stored per application; credentials are optional, encrypted, hidden and replaceable.
-- WhatsApp Business is available as a draft/AI content channel. Setup for new platforms stays explicitly untested with posting disabled.
+- Direct publishing and scheduling for Instagram images/Reels, LinkedIn text/images/video, X text/images/video, YouTube video uploads, and WhatsApp Business recipient messages. Credentials are verified before use.
 - Application health monitoring: one configurable public endpoint per application, manual checks, optional 5/15/60-minute scheduled checks, online/offline/error/stale states, response timing, 30-day check history and observed outage/recovery records.
 - Website context capture and per-application HTML, RSS/Atom or text-based PDF sources with captured evidence and optional comparison pages.
 - AI research packages: headline, caption, hashtags, evidence quotes and concerns; deterministic branded PNG title cards with Hindi text support.
@@ -65,7 +65,22 @@ Budgets reset at midnight UTC. Reservations estimate input from prompt bytes plu
 
 ## Connect Facebook when ready
 
-For other platforms, open Social accounts and choose a platform. Save the application, platform account ID and optional label/token. Instagram optionally stores a linked Facebook Page ID; WhatsApp optionally stores the WhatsApp Business Account ID in addition to its Phone Number ID. LinkedIn accepts a member or organization URN; YouTube takes a channel ID. Blank replacement-token fields preserve saved tokens, and Remove saved token clears them. Saving or editing makes no external request. Connection testing, OAuth/token refresh, and posting for these new platforms are intentionally deferred. Only Facebook currently has a live identity-check and publish action.
+All six platforms use Social accounts → verify identity → review a channel-specific draft → publishing preview → publish or schedule. Account IDs and encrypted tokens belong to one application. Choose the Instagram token login method explicitly. Blank replacement tokens preserve saved credentials. Saving setup makes no network request. Tokens are supplied manually; automatic OAuth refresh is not implemented, so expired tokens must be replaced and verified.
+
+| Channel | Supported publication | Connection requirements |
+| --- | --- | --- |
+| Facebook | Text/link, one PNG image or MP4 video | Page token and Page publishing permissions |
+| Instagram | One image (converted to JPEG) or video Reel | Professional account, correct login method, content publishing permission; public HTTPS APP_URL |
+| LinkedIn | Text, one image or video | Member OAuth with w_member_social, or organization access with w_organization_social; openid/profile for member identity checks; organization ACL access for organization verification |
+| X | Text, one image or video | OAuth2 user token with users.read, tweet.read, tweet.write and media.write; eligible API access |
+| YouTube | MP4, title, description, privacy and audience selection | Channel OAuth with youtube.upload and youtube.readonly; unaudited apps may be limited to private uploads |
+| WhatsApp Business | One recipient: service-window text/image/video, or approved text template with body parameters | Cloud API phone-number ID/token, recipient consent; last inbound time within 24 hours for free-form messages |
+
+This does not send WhatsApp Status/Channel posts or bulk recipient campaigns. Templates replace the draft body and require explicit wording/parameter confirmation. Uploaded YouTube videos and accepted WhatsApp messages are recorded as platform-accepted; processing, delivery and read receipts are not independently confirmed. One saved post has one channel/destination; create a separate draft to adapt the same topic for another platform.
+
+Instagram, LinkedIn and X media wait for processing before the final write. `hub:complete-publications` runs every minute through the existing Laravel scheduler. Processing expires after one hour. Credentials/source approval changes stop pending final writes. Uncertain writes are never automatically repeated. Use a persistent cache shared by the web and scheduler processes. Instagram uses a two-hour signed URL for the selected attachment; all other media remains private. LinkedIn defaults to API version 202606 (`LINKEDIN_API_VERSION`). Upload destinations are restricted to documented provider hosts and redirects are disabled. Live permissions and platform media restrictions still require account testing; automated tests fake provider responses.
+
+The built-in workflow caps videos at 40 MB (WhatsApp 16 MB), images at 8 MB (X/WhatsApp 5 MB), and text according to channel limits. X uses a conservative weighted character count, without shortening URLs locally. Large or unsupported media is rejected without truncating the post.
 
 Open Social accounts, select an application, and enter a numeric Facebook Page ID and its Page access token. Saving is local only. Choose Verify Page to check that the token identifies the expected Page. Identity verification does not prove publishing permission: the Meta app/token also needs pages_manage_posts, pages_read_engagement and appropriate Page access. Follow Meta's setup and app review requirements. This connection flow uses a manually supplied Page token, not OAuth login.
 
@@ -83,7 +98,7 @@ In Research & automation, read an application's website to save context for AI a
 
 Select a saved AI provider on the application and configure its budget before enabling source checks. Each changed source uses one budgeted AI generation; unchanged pages do not generate again. Source snapshots retain retrieved text, URLs, capture time, AI output and review concerns. Add a comparison URL to check an existing article against official evidence. This is evidence matching, not a guarantee that an authority's statements are correct.
 
-Automatic publishing is opt-in per HTTPS official source and requires a verified Facebook Page for the same application. The first capture remains a review draft. Later changes can schedule exact source headlines/excerpts if a supported, unambiguous notice date is within seven days, quotes match and AI reports no concerns. When a comparison URL is supplied, both quotes must also occur there. Editorial rewrites, translations, uncertain dates and mismatches stay in review. Automatically published excerpts retain the source's language. AI suggestions are still available in the selected application language for manual review.
+Automatic publishing is opt-in per HTTPS official source and requires a verified matching Facebook, Instagram, LinkedIn or X account for the same application. Channel length/media requirements are checked before scheduling; YouTube and WhatsApp require manual audience/recipient settings. The first capture remains a review draft. Later changes can schedule exact source headlines/excerpts if a supported, unambiguous notice date is within seven days, quotes match and AI reports no concerns. When a comparison URL is supplied, both quotes must also occur there. Editorial rewrites, translations, uncertain dates and mismatches stay in review. Automatically published excerpts retain the source's language. AI suggestions are still available in the selected application language for manual review.
 
 Automatic posts are re-fetched before submission; changed/unavailable evidence or changed source settings, post content or Page credentials hold publishing. Repeated selected headline/excerpt pairs for a source do not create another post. Each source check selects one announcement; broad feeds with many simultaneous notices should be split into specific source pages. Changing source settings resets its baseline and cancels queued automatic posts.
 
@@ -95,7 +110,7 @@ Sources default to paused and automatic publishing defaults to off. Add and appr
 
 ## Not implemented yet
 
-AI connection/model-discovery testing, arbitrary media uploads, AI image-provider integration, social OAuth, publishing to channels other than Facebook Pages, automatic publishing retries/reconciliation, analytics collection, whole-site crawling and scanned-PDF OCR. Facebook publishing requires owner review or an explicitly enabled approved-source automation.
+AI connection/model-discovery testing, arbitrary media uploads, social OAuth/token refresh, WhatsApp delivery webhooks, automatic publishing retries/reconciliation, analytics collection, whole-site crawling and scanned-PDF OCR. Facebook publishing requires owner review or an explicitly enabled approved-source automation.
 
 AI connections default to disabled. Model identifiers are configured manually and must support the chosen text API; not every provider model is compatible. Reconciliation of interrupted requests is future work.
 
@@ -162,7 +177,7 @@ After deploying the media migration, open **AI providers → Image & video provi
 
 Select an image and video provider separately in each application's edit screen. The existing text provider remains independent. From a saved post, choose **Create AI image or video**, enter visual direction, choose landscape/portrait (or square for images), and submit. Veo requests produce one eight-second 720p video; optionally use the attached image as its starting frame. The existing scheduler runs `hub:generate-media` every minute; no extra cron entry is needed. PHP GD is needed for validated PNG conversion.
 
-The media page shows queued, processing, completed, failed, and uncertain requests. Completed files are private previews/downloads until the owner chooses **Use this image/video**. This replaces the current attachment, clears review, and cancels queued publishing. Editing the post also clears attachments. Review again to publish or schedule to Facebook. Facebook video uploads may require processing before the public link becomes visible. Other social channels remain draft/download workflows.
+The media page shows queued, processing, completed, failed, and uncertain requests. Completed files are private previews/downloads until the owner chooses **Use this image/video**. This replaces the current attachment, clears review, and cancels queued publishing. Editing the post also clears attachments. Review again to publish or schedule to the chosen channel. Video uploads may require processing before the public link becomes visible. Choose a channel-compatible format before generating, such as square Instagram images or portrait Reels/Shorts.
 
 Research sources can select AI image or video generation alongside the researched draft. These media drafts require visual review before scheduling; exact-source automatic publishing with branded cards remains available. Media budgets are shared across the owner's applications per media service, independently of text budgets. One configured estimate is reserved per request; failed/uncertain submitted requests retain it and never automatically resubmit. Queued requests expire at the next UTC day without being submitted. Submitted video operations are polled using an encrypted key snapshot, removed when the job finishes. The configured estimate is not an invoice or a guaranteed provider billing cap.
 

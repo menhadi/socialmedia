@@ -6,10 +6,13 @@ use App\Http\Controllers\HubController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\PublicationController;
+use App\Http\Controllers\PublishingAssetController;
 use App\Http\Controllers\ResearchController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SocialAccountController;
 use Illuminate\Support\Facades\Route;
+
+Route::get('/publishing-assets/{publication}', PublishingAssetController::class)->middleware(['signed', 'throttle:120,1'])->name('publishing.asset');
 
 Route::middleware('guest')->group(function () {
     Route::view('/login', 'login')->name('login');

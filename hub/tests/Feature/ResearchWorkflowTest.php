@@ -216,6 +216,7 @@ class ResearchWorkflowTest extends TestCase
     {
         $source = $this->source();
         $post = $this->reviewed($source);
+        Storage::disk('local')->put('post-images/old.png', 'old-image');
         $post->forceFill(['image_path' => 'post-images/old.png', 'image_hash' => str_repeat('a', 64)])->save();
         $when = now()->addHours(3)->setTimezone('Asia/Kolkata');
         $this->post("/posts/{$post->id}/schedule", [
@@ -382,5 +383,18 @@ class ResearchWorkflowTest extends TestCase
         } catch (\RuntimeException) {
             Http::assertNothingSent();
         }
+    }
+
+    public function test_official_source_can_schedule_linkedin_after_initial_review_baseline(): void
+    {
+        $source = $this->source(['channel' => 'linkedin', 'enabled' => true, 'auto_publish' => true, 'approved_at' => now()]);
+        SocialAccount::findOrFail($source->social_account_id)->forceFill(['provider' => 'linkedin', 'page_id' => 'urn:li:organization:123'])->save();
+        $this->fakeResearch($this->package());
+        app(ResearchSource::class)->run($source);
+        $this->assertDatabaseCount('post_schedules', 0);
+        $this->fakeResearch($this->package(['headline_quote' => 'Another examination notice released']));
+        app(ResearchSource::class)->run($source->fresh());
+        $this->assertDatabaseHas('source_snapshots', ['status' => 'scheduled']);
+        $this->assertSame('linkedin', PostSchedule::firstOrFail()->post->channel);
     }
 }

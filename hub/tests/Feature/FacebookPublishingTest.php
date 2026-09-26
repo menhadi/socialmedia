@@ -182,7 +182,7 @@ class FacebookPublishingTest extends TestCase
             && $request['published'] === 'true' && ! isset($request['title'])
             && $request->hasHeader('Authorization', 'Bearer test-page-token'));
         Http::assertSentCount(2);
-        $this->get("/posts/{$post->id}/publish")->assertOk()->assertSee('View on Facebook')->assertDontSee('Publish now');
+        $this->get("/posts/{$post->id}/publish")->assertOk()->assertSee('View on platform')->assertDontSee('Publish now');
         $this->get("/posts/{$post->id}/edit")->assertOk()->assertSee('locked');
         $this->post("/posts/{$post->id}/review")->assertSessionHasErrors('post');
         $this->put("/posts/{$post->id}", ['brand_id' => $post->brand_id, 'title' => 'Changed', 'body' => 'Changed', 'channel' => 'facebook'])->assertSessionHasErrors('post');
@@ -229,7 +229,7 @@ class FacebookPublishingTest extends TestCase
         $post->forceFill(['status' => 'draft', 'reviewed_at' => null])->save();
         $this->post("/posts/{$post->id}/publish", $this->payload($post, $account))->assertSessionHasErrors('post');
         $post->forceFill(['status' => 'reviewed', 'reviewed_at' => now(), 'channel' => 'linkedin'])->save();
-        $this->post("/posts/{$post->id}/publish", $this->payload($post, $account))->assertSessionHasErrors('post');
+        $this->post("/posts/{$post->id}/publish", $this->payload($post, $account))->assertSessionHasErrors('social_account_id');
         $post->channel = 'facebook';
         $post->save();
         $otherAccount = SocialAccount::factory()->create();

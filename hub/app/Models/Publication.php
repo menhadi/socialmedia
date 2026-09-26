@@ -12,7 +12,7 @@ class Publication extends Model
 
     protected function casts(): array
     {
-        return ['published_at' => 'datetime'];
+        return ['published_at' => 'datetime', 'options' => 'encrypted:array', 'transfer' => 'encrypted:array', 'next_check_at' => 'datetime'];
     }
 
     public function post(): BelongsTo
