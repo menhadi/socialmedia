@@ -5,6 +5,8 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\HubController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\PublicationController;
+use App\Http\Controllers\ResearchController;
+use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SocialAccountController;
 use Illuminate\Support\Facades\Route;
 
@@ -13,6 +15,16 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 });
 Route::middleware('auth')->group(function () {
+    Route::get('/research', [ResearchController::class, 'index'])->name('research');
+    Route::post('/research', [ResearchController::class, 'save'])->name('research.store');
+    Route::put('/research/{source}', [ResearchController::class, 'save'])->name('research.update');
+    Route::post('/research/{source}/check', [ResearchController::class, 'check'])->middleware('throttle:5,1')->name('research.check');
+    Route::post('/research/brands/{brand}/website', [ResearchController::class, 'website'])->middleware('throttle:5,1')->name('research.website');
+    Route::get('/schedules', [ScheduleController::class, 'index'])->name('schedules');
+    Route::post('/posts/{post}/schedule', [ScheduleController::class, 'store'])->name('schedules.store');
+    Route::post('/schedules/{schedule}/cancel', [ScheduleController::class, 'cancel'])->name('schedules.cancel');
+    Route::get('/posts/{post}/image', [ScheduleController::class, 'image'])->name('posts.image');
+    Route::post('/posts/{post}/image', [ScheduleController::class, 'createImage'])->middleware('throttle:5,1')->name('posts.image.create');
     Route::get('/monitoring', [MonitoringController::class, 'index'])->name('monitoring');
     Route::put('/monitoring/applications/{brand}', [MonitoringController::class, 'save'])->name('monitoring.save');
     Route::get('/monitoring/{monitor}', [MonitoringController::class, 'show'])->name('monitoring.show');

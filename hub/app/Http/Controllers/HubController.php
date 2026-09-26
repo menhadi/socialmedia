@@ -108,6 +108,9 @@ class HubController extends Controller
             if ($post) {
                 $post = Post::whereKey($post->id)->lockForUpdate()->firstOrFail();
                 $post->assertEditable();
+                $post->schedules()->where('status', 'queued')->update(['status' => 'cancelled', 'reason' => 'Post edited; review and schedule the new version.']);
+                $post->image_path = null;
+                $post->image_hash = null;
             } else {
                 $post = new Post;
             }

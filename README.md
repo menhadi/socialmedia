@@ -21,6 +21,10 @@ A general-purpose social content workspace. The Laravel application is in [hub](
 - Account setup for Instagram professional accounts, LinkedIn members/organizations, X, YouTube channels and WhatsApp Business Cloud API senders. Account labels and platform-specific IDs are stored per application; credentials are optional, encrypted, hidden and replaceable.
 - WhatsApp Business is available as a draft/AI content channel. Setup for new platforms stays explicitly untested with posting disabled.
 - Application health monitoring: one configurable public endpoint per application, manual checks, optional 5/15/60-minute scheduled checks, online/offline/error/stale states, response timing, 30-day check history and observed outage/recovery records.
+- Website context capture and per-application HTML, RSS/Atom or text-based PDF sources with captured evidence and optional comparison pages.
+- AI research packages: headline, caption, hashtags, evidence quotes and concerns; deterministic branded PNG title cards with Hindi text support.
+- Reviewed Facebook photo publishing and timezone-aware scheduled delivery, with a cancellable publishing queue and worker heartbeat.
+- Opt-in automatic publishing from owner-approved official sources, exact-quote/date checks, duplicate detection and source revalidation before publishing.
 
 No named application is built in. No application source-code or database connection is needed to use the workspace.
 
@@ -53,7 +57,7 @@ Tests use an isolated in-memory SQLite database and fake external provider respo
 
 Open AI providers. Supply an API key, exact text model identifier, daily request/output limits, daily estimated USD budget and the model's current input/output USD prices per million tokens. Then enable generation. Saving settings itself makes no request.
 
-Open AI assistant, choose an application and provider (or its saved preference), choose a task and supply a topic and source text. Leave language blank to inherit the application language, or enter Hindi, English or another language. Links are references only; this stage does not fetch webpages.
+Open AI assistant, choose an application and provider (or its saved preference), choose a task and supply a topic and source text. Leave language blank to inherit the application language, or enter Hindi, English or another language. Links entered in the standalone AI assistant are references only. Use Research & automation to retrieve website context and source evidence.
 
 Generation sends only the selected application's profile and the entered task/source material to the selected provider. It does not publish, overwrite an existing post or send other applications' data. Use Save as a draft after reviewing the result.
 
@@ -65,7 +69,7 @@ For other platforms, open Social accounts and choose a platform. Save the applic
 
 Open Social accounts, select an application, and enter a numeric Facebook Page ID and its Page access token. Saving is local only. Choose Verify Page to check that the token identifies the expected Page. Identity verification does not prove publishing permission: the Meta app/token also needs pages_manage_posts, pages_read_engagement and appropriate Page access. Follow Meta's setup and app review requirements. This connection flow uses a manually supplied Page token, not OAuth login.
 
-Create a Facebook draft, save it and mark it reviewed. Open publishing preview, choose a verified Page for that application, optionally include the saved link, and confirm Publish now. Only the saved body and selected link are sent, not the internal title. This creates a real Page post immediately. Implementation tests use simulated Facebook responses; live account access still needs verification.
+Create a Facebook draft, save it, optionally create a branded image, and mark it reviewed. Open publishing preview, choose a verified Page for that application, optionally include the saved link, and confirm Publish now or choose a scheduled date/time. The saved body and selected link are sent; when an image is present its title is visible and the link is included in the photo caption. Implementation tests use simulated Facebook responses; live account access still needs verification.
 
 Each submission is reserved in the database before the API call. Repeated form submissions return the existing result. A known rejection permits another attempt from a fresh preview and retains the rejected attempt in history. Timeouts, malformed responses and unknown outcomes stay locked and are never automatically retried. Check the Page directly and reconcile with an administrator; automatic reconciliation is not implemented. Interrupted processes can leave a publishing record that also stays locked. Do not recreate an uncertain post merely to retry it.
 
@@ -73,11 +77,27 @@ Confirmed success is saved before retrieving its public link. Refresh public lin
 
 The API version defaults to v25.0; configure FACEBOOK_GRAPH_VERSION in the environment when needed. Keep it on a supported version for your Meta app. Calls use a fixed Meta host, bearer-token headers, no redirects, a 25-second timeout and no automatic retries. Back up APP_KEY with the database to keep Page tokens decryptable.
 
+## Research and scheduled publishing
+
+In Research & automation, read an application's website to save context for AI assistance. Each URL reads one page; the reader does not crawl an entire site or follow article links. Add specific notice pages, feeds or PDFs for each topic/exam. Optional HTML element IDs scope extraction to a section. Text-based PDFs require `pdftotext`; scanned PDFs and JavaScript-only pages need an alternative readable URL.
+
+Select a saved AI provider on the application and configure its budget before enabling source checks. Each changed source uses one budgeted AI generation; unchanged pages do not generate again. Source snapshots retain retrieved text, URLs, capture time, AI output and review concerns. Add a comparison URL to check an existing article against official evidence. This is evidence matching, not a guarantee that an authority's statements are correct.
+
+Automatic publishing is opt-in per HTTPS official source and requires a verified Facebook Page for the same application. The first capture remains a review draft. Later changes can schedule exact source headlines/excerpts if a supported, unambiguous notice date is within seven days, quotes match and AI reports no concerns. When a comparison URL is supplied, both quotes must also occur there. Editorial rewrites, translations, uncertain dates and mismatches stay in review. Automatically published excerpts retain the source's language. AI suggestions are still available in the selected application language for manual review.
+
+Automatic posts are re-fetched before submission; changed/unavailable evidence or changed source settings, post content or Page credentials hold publishing. Repeated selected headline/excerpt pairs for a source do not create another post. Each source check selects one announcement; broad feeds with many simultaneous notices should be split into specific source pages. Changing source settings resets its baseline and cancels queued automatic posts.
+
+Images are 1200×900 branded title cards, not generated photographs. Server rendering uses ImageMagick with Pango for Unicode shaping and local fonts; set `HUB_IMAGE_CONVERT` if its executable is not `/usr/bin/convert`. Set `HUB_PDFTOTEXT` if the PDF executable is not `/usr/bin/pdftotext`. No PHP dependencies were added. Missing renderers hold automatic image posts; a draft remains available. Editing a post clears its stale image and cancels queued delivery. Create the image after final edits, then review the complete saved post.
+
+The existing once-per-minute Laravel scheduler also runs `hub:run-content-workflow`. Run it as the application user with access to private storage and a persistent shared cache store (database or file, not array). Publishing queue shows the latest worker heartbeat. Schedules use UTC internally and accept a selected timezone in the UI. Due work runs in bounded batches and may be delayed when many items are due or the server is unavailable. Cancel queued posts in the queue; started/uncertain submissions cannot be cancelled or automatically retried.
+
+Sources default to paused and automatic publishing defaults to off. Add and approve the intended sources after deployment; upgrading does not automatically publish existing drafts.
+
 ## Not implemented yet
 
-AI connection/model-discovery testing, media uploads, social OAuth, publishing to channels other than Facebook Pages, scheduled delivery, automatic publishing retries/reconciliation, analytics collection and automatic content-source integrations. A verified Facebook Page connection and an explicit publishing action are required to publish.
+AI connection/model-discovery testing, arbitrary media uploads, AI image-provider integration, social OAuth, publishing to channels other than Facebook Pages, automatic publishing retries/reconciliation, analytics collection, whole-site crawling and scanned-PDF OCR. Facebook publishing requires owner review or an explicitly enabled approved-source automation.
 
-AI connections default to disabled. Model identifiers are configured manually and must support the chosen text API; not every provider model is compatible. Background AI jobs and reconciliation of interrupted requests are future work.
+AI connections default to disabled. Model identifiers are configured manually and must support the chosen text API; not every provider model is compatible. Reconciliation of interrupted requests is future work.
 
 ## Deployment direction
 

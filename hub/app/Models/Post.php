@@ -27,13 +27,21 @@ class Post extends Model
         return $this->hasMany(Publication::class);
     }
 
+    public function schedules(): HasMany
+    {
+        return $this->hasMany(PostSchedule::class);
+    }
+
     public function publishingFingerprint(): string
     {
-        return hash('sha256', json_encode([$this->id, $this->brand_id, $this->title, $this->channel, $this->body, $this->source_url, $this->reviewed_at?->toISOString()], JSON_THROW_ON_ERROR));
+        return hash('sha256', json_encode([$this->id, $this->brand_id, $this->title, $this->channel, $this->body, $this->source_url, $this->reviewed_at?->toISOString(), $this->image_hash], JSON_THROW_ON_ERROR));
     }
 
     public function assertEditable(): void
     {
+        if ($this->schedules()->whereIn('status', ['running', 'uncertain'])->exists()) {
+            throw ValidationException::withMessages(['post' => 'A scheduled submission is running. Check the schedule before editing.']);
+        }
         if (! in_array($this->status, ['draft', 'reviewed'], true) || $this->publications()->whereIn('status', ['publishing', 'published', 'uncertain'])->exists()) {
             throw ValidationException::withMessages(['post' => 'This post has been submitted to Facebook and cannot be edited or submitted again. Check its publishing history below.']);
         }

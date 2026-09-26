@@ -7,6 +7,7 @@ use App\Models\Publication;
 use App\Models\SocialAccount;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class PublishPost
@@ -28,7 +29,16 @@ class PublishPost
 
                 return [$existing, null, false];
             }
-            $post->assertEditable();
+            $activeSchedule = $post->schedules()->whereIn('status', ['queued', 'running'])->first();
+            if ($activeSchedule && ($activeSchedule->id !== ($data['schedule_id'] ?? null) || $activeSchedule->status !== 'running'
+                || $activeSchedule->request_key !== $data['request_key'])) {
+                throw ValidationException::withMessages(['post' => 'Cancel the active schedule before publishing manually.']);
+            }
+            if (! $activeSchedule) {
+                $post->assertEditable();
+            } elseif ($post->publications()->whereIn('status', ['publishing', 'published', 'uncertain'])->exists()) {
+                throw ValidationException::withMessages(['post' => 'A publication already exists for this post.']);
+            }
             if ($post->status !== 'reviewed' || ! $post->reviewed_at || $post->channel !== 'facebook') {
                 throw ValidationException::withMessages(['post' => 'Save and review a Facebook post before publishing.']);
             }
@@ -39,6 +49,20 @@ class PublishPost
             if (! $account || ! $account->verified_at || ! $account->access_token) {
                 throw ValidationException::withMessages(['social_account_id' => 'Choose a verified Facebook Page connected to this application.']);
             }
+            if (isset($data['credential_version']) && $account->credential_version !== $data['credential_version']) {
+                throw ValidationException::withMessages(['post' => 'The Page connection changed.']);
+            }
+            if ($activeSchedule?->automatic) {
+                $snapshot = $activeSchedule->snapshot;
+                $source = $snapshot?->source()->lockForUpdate()->first();
+                if (! $source || ! $source->enabled || ! $source->auto_publish || ! $source->approved_at || $source->version !== $snapshot->source_version) {
+                    throw ValidationException::withMessages(['post' => 'Source approval changed.']);
+                }
+            }
+            if ($post->image_path && (! Storage::disk('local')->exists($post->image_path)
+                || ! hash_equals($post->image_hash, hash('sha256', Storage::disk('local')->get($post->image_path))))) {
+                throw ValidationException::withMessages(['post' => 'The saved image is missing or changed. Regenerate it and review again.']);
+            }
             $publication = new Publication;
             $publication->forceFill([
                 'post_id' => $post->id, 'social_account_id' => $account->id,
@@ -46,6 +70,7 @@ class PublishPost
                 'page_id' => $account->page_id, 'page_name' => $account->page_name,
                 'message' => $post->body, 'link' => ($data['include_link'] ?? false) ? $post->source_url : null,
                 'status' => 'publishing',
+                'image_path' => $post->image_path,
             ])->save();
             $post->status = 'publishing';
             $post->save();

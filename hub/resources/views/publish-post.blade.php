@@ -6,11 +6,14 @@
     <section class="panel preview">
         <h2>Saved message</h2>
         <div class="post-body">{{ $post->body }}</div>
-        <p class="muted small">The internal title is not sent. Facebook controls how the published post is displayed.</p>
+        @if($post->image_path)<img src="{{ route('posts.image',$post) }}" alt="Image included in this Facebook post" style="width:100%;height:auto;border-radius:12px"><p class="muted small">This image will be attached. A shared link is included in the photo caption.</p>@endif
+        <p class="muted small">{{ $post->image_path ? 'The title appears on the image.' : 'The internal title is not sent.' }} Facebook controls how the published post is displayed.</p>
     </section>
     <section class="panel form-panel">
     @if($post->channel!=='facebook')
         <h2>Save account details now</h2><p class="muted">Posting for {{ \App\Models\Post::CHANNELS[$post->channel] }} will be added later. This content stays saved as a draft or reviewed post.</p><a class="button secondary" href="{{ route('social',['provider'=>array_key_exists($post->channel,\App\Services\Social\AccountSetup::PROVIDERS)?$post->channel:'facebook']) }}">Open account setup</a>
+    @elseif($activeSchedule)
+        <h2>Schedule {{ $activeSchedule->status }}</h2><p>This saved post is in the publishing queue. Cancel a queued schedule there before publishing manually.</p><a class="button secondary" href="{{ route('schedules') }}">Open publishing queue</a>
     @elseif($ready && $accounts->isNotEmpty())
         <h2>Publish to Facebook</h2>
         <form method="post" action="{{ route('posts.publish.store',$post) }}">
@@ -26,6 +29,19 @@
             <p class="muted small">This creates a real Facebook Page post immediately. Each saved post can be published once. A rejected submission can be tried again from a new preview.</p>
             <button class="button full">Publish now</button>
         </form>
+        <hr>
+        <h2>Or schedule this post</h2>
+        <form method="post" action="{{ route('schedules.store',$post) }}">
+            @csrf
+            <input type="hidden" name="fingerprint" value="{{ $post->publishingFingerprint() }}">
+            <label>Destination Page<select name="social_account_id" required>@foreach($accounts as $account)<option value="{{ $account->id }}">{{ $account->page_name }} · {{ $account->page_id }}</option>@endforeach</select></label>
+            <label>Date & time<input type="datetime-local" name="scheduled_at" required value="{{ old('scheduled_at') }}"></label>
+            <label>Timezone<select name="timezone"><option value="Asia/Kolkata">India (Asia/Kolkata)</option><option value="UTC">UTC</option>@foreach(['Europe/London','America/New_York','America/Los_Angeles','Asia/Dubai'] as $zone)<option value="{{ $zone }}">{{ $zone }}</option>@endforeach</select></label>
+            @if($post->source_url)<label class="checkbox"><input type="checkbox" name="include_link" value="1" checked>Include the saved link</label>@endif
+            <label class="checkbox"><input type="checkbox" name="confirm" value="1" required>I approve this saved post and image for automatic publishing at the selected time.</label>
+            <button class="button full">Schedule post</button>
+        </form>
+        <p><a href="{{ route('schedules') }}">View or cancel scheduled posts →</a></p>
     @elseif($ready)
         <h2>Connect a Page first</h2><p class="muted">Verify a Facebook Page for {{ $post->brand->name }} before publishing.</p><a class="button" href="{{ route('social') }}">Open Social accounts</a>
     @else

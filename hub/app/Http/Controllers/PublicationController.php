@@ -25,12 +25,13 @@ class PublicationController extends Controller
         $accounts = SocialAccount::where('brand_id', $post->brand_id)->where('provider', 'facebook')
             ->whereNotNull('verified_at')->whereNotNull('access_token')->orderBy('page_name')->get();
         $publications = $post->publications()->latest()->get();
+        $activeSchedule = $post->schedules()->whereIn('status', ['queued', 'running', 'uncertain'])->first();
         $ready = $post->status === 'reviewed' && $post->reviewed_at && $post->channel === 'facebook'
             && ! $publications->contains(fn (Publication $publication): bool => in_array($publication->status, ['publishing', 'published', 'uncertain'], true));
 
         return view('publish-post', [
             'post' => $post, 'accounts' => $accounts, 'publications' => $publications,
-            'ready' => $ready, 'requestKey' => (string) Str::uuid(),
+            'ready' => $ready, 'requestKey' => (string) Str::uuid(), 'activeSchedule' => $activeSchedule,
         ]);
     }
 

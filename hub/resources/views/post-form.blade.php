@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('title',$post->exists?'Edit post':'Create post')
 @section('content')
-@php($locked = $post->exists && (!in_array($post->status,['draft','reviewed']) || $post->publications()->whereIn('status',['publishing','published','uncertain'])->exists()))
+@php($locked = $post->exists && (!in_array($post->status,['draft','reviewed']) || $post->publications()->whereIn('status',['publishing','published','uncertain'])->exists() || $post->schedules()->whereIn('status',['running','uncertain'])->exists()))
 <div class="page-heading"><div><a class="back" href="{{ route('posts') }}">← Content library</a><h1>Make something worth sharing.</h1><p class="muted">Save a draft, refine your message and review it when ready.</p></div></div>
 @if($brands->isEmpty())
     <div class="panel empty"><h2>Add an application first.</h2><p>Every post belongs to an application, keeping its audience and voice clear.</p><a class="button" href="{{ route('applications.create') }}">Add application</a></div>
@@ -28,6 +28,8 @@
                 @if($post->exists)
                     <div class="preview-brand"><span class="avatar">{{ mb_substr($post->brand->name,0,1) }}</span><div><strong>{{ $post->brand->name }}</strong><small>{{ \App\Models\Post::CHANNELS[$post->channel] }}</small></div></div>
                     <div class="post-body">{{ $post->body }}</div>
+                    @if($post->image_path)<img src="{{ route('posts.image',$post) }}" alt="Branded post image" style="width:100%;height:auto;border-radius:12px"><p><a href="{{ route('posts.image',$post) }}" download="post.png">Download image</a></p>@endif
+                    @if(!$locked)<form method="post" action="{{ route('posts.image.create',$post) }}">@csrf<button class="button secondary">{{ $post->image_path?'Regenerate':'Create' }} branded image</button></form><p class="muted small">Saving edits clears the old image and cancels a queued schedule. Create the image after your final edits.</p>@endif
                     @if($post->source_url)<a class="source-link" href="{{ $post->source_url }}" target="_blank" rel="noopener noreferrer">{{ $post->source_url }}</a>@endif
                     <p class="muted small">Preview shows the last saved version.</p>
                     @if($post->status==='draft' && !$locked)<form method="post" action="{{ route('posts.review',$post) }}">@csrf<button class="button secondary full">Mark saved version as reviewed</button></form>@endif

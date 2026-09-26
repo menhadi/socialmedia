@@ -8,6 +8,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 
 class FacebookClient
 {
@@ -19,7 +20,7 @@ class FacebookClient
         }
 
         return Http::baseUrl('https://graph.facebook.com/'.$version)
-            ->withToken($account->access_token)->acceptJson()->asForm()
+            ->withToken($account->access_token)->acceptJson()
             ->connectTimeout(5)->timeout(25)->withoutRedirecting();
     }
 
@@ -63,12 +64,21 @@ class FacebookClient
             $payload['link'] = $publication->link;
         }
         try {
-            $response = $this->request($account)->post($publication->page_id.'/feed', $payload);
+            if ($publication->image_path) {
+                $caption = $publication->message;
+                if ($publication->link && ! str_contains($caption, $publication->link)) {
+                    $caption .= "\n\n".$publication->link;
+                }
+                $response = $this->request($account)->attach('source', Storage::disk('local')->get($publication->image_path), 'post.png')
+                    ->post($publication->page_id.'/photos', ['caption' => $caption, 'published' => 'true']);
+            } else {
+                $response = $this->request($account)->asForm()->post($publication->page_id.'/feed', $payload);
+            }
         } catch (ConnectionException) {
             throw new FacebookFailure('response', true);
         }
         $this->check($response);
-        $id = $response->json('id');
+        $id = $response->json($publication->image_path ? 'post_id' : 'id');
         if (! is_string($id) || ! preg_match('/^'.preg_quote($publication->page_id, '/').'_[0-9]+$/D', $id) || strlen($id) > 255) {
             throw new FacebookFailure('response', true);
         }
