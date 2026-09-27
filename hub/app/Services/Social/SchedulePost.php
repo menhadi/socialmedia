@@ -2,6 +2,7 @@
 
 namespace App\Services\Social;
 
+use App\Models\AutomationRule;
 use App\Models\ContentSource;
 use App\Models\Post;
 use App\Models\PostSchedule;
@@ -67,6 +68,10 @@ class SchedulePost
         try {
             $schedule->refresh();
             $post = $schedule->post;
+            AutomationRule::assertSchedule($schedule);
+            if ($post->archived_at) {
+                throw new \RuntimeException('Post archived.');
+            }
             if (! hash_equals($schedule->fingerprint, $post->publishingFingerprint())) {
                 throw new \RuntimeException('The saved post changed. Review and schedule the current version.');
             }

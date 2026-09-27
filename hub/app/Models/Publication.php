@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Publication extends Model
 {
@@ -13,6 +14,11 @@ class Publication extends Model
     protected function casts(): array
     {
         return ['published_at' => 'datetime', 'options' => 'encrypted:array', 'transfer' => 'encrypted:array', 'next_check_at' => 'datetime'];
+    }
+
+    public function latestAnalytics(): HasOne
+    {
+        return $this->hasOne(AnalyticsSnapshot::class)->latestOfMany();
     }
 
     public function post(): BelongsTo

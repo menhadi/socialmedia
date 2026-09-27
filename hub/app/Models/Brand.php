@@ -10,6 +10,8 @@ class Brand extends Model
 {
     use HasFactory;
 
+    protected $hidden = ['intake_token_hash'];
+
     protected $fillable = ['name', 'website', 'description', 'audience', 'tone', 'language', 'instructions', 'ai_connection_id', 'image_connection_id', 'video_connection_id'];
 
     public function posts()

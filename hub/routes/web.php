@@ -1,7 +1,10 @@
 <?php
 
 use App\Http\Controllers\AiGenerationController;
+use App\Http\Controllers\AnalyticsController;
+use App\Http\Controllers\ApplicationIntakeController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\AutomationController;
 use App\Http\Controllers\HubController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MonitoringController;
@@ -19,6 +22,16 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 });
 Route::middleware('auth')->group(function () {
+    Route::get('/automation', [AutomationController::class, 'index'])->name('automation');
+    Route::post('/automation/rules', [AutomationController::class, 'save'])->name('automation.save');
+    Route::post('/automation/content', [ApplicationIntakeController::class, 'manual'])->name('automation.content');
+    Route::post('/automation/content/{item}/approve', [AutomationController::class, 'approve'])->name('automation.approve');
+    Route::post('/automation/{brand}/token', [ApplicationIntakeController::class, 'token'])->name('automation.token');
+    Route::post('/posts/{post}/assess', [AutomationController::class, 'assess'])->middleware('throttle:5,1')->name('posts.assess');
+    Route::post('/posts/{post}/archive', [AutomationController::class, 'archive'])->name('posts.archive');
+    Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
+    Route::post('/analytics/{publication}/refresh', [AnalyticsController::class, 'refresh'])->middleware('throttle:5,1')->name('analytics.refresh');
+
     Route::get('/media-providers', [MediaController::class, 'settings'])->name('media.settings');
     Route::put('/media-providers/{kind}', [MediaController::class, 'saveSettings'])->name('media.settings.save');
     Route::get('/posts/{post}/media', [MediaController::class, 'index'])->name('media');
@@ -68,3 +81,6 @@ Route::middleware('auth')->group(function () {
     Route::get('/ai-providers', [HubController::class, 'providers'])->name('providers');
     Route::put('/ai-providers/{provider}', [HubController::class, 'saveProvider'])->name('providers.update');
 });
+
+Route::post('/api/v1/content', [ApplicationIntakeController::class, 'store'])->middleware('throttle:30,1');
+Route::post('/api/v1/events', [ApplicationIntakeController::class, 'event'])->middleware('throttle:120,1');

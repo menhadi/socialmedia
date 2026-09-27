@@ -110,7 +110,7 @@ Sources default to paused and automatic publishing defaults to off. Add and appr
 
 ## Not implemented yet
 
-AI connection/model-discovery testing, arbitrary media uploads, social OAuth/token refresh, WhatsApp delivery webhooks, automatic publishing retries/reconciliation, analytics collection, whole-site crawling and scanned-PDF OCR. Facebook publishing requires owner review or an explicitly enabled approved-source automation.
+AI connection/model-discovery testing, arbitrary media uploads, social OAuth/token refresh, WhatsApp delivery webhooks, automatic publishing retries/reconciliation, whole-site crawling and scanned-PDF OCR. Publishing requires owner review or an explicitly enabled content/official-source automation.
 
 AI connections default to disabled. Model identifiers are configured manually and must support the chosen text API; not every provider model is compatible. Reconciliation of interrupted requests is future work.
 
@@ -192,3 +192,19 @@ Provider documentation: [Gemini images](https://ai.google.dev/gemini-api/docs/im
 - Claude Messages: https://platform.claude.com/docs/en/api/messages/create
 - Meta Pages setup: https://developers.facebook.com/docs/pages-api/getting-started/
 - Meta Page publishing reference: https://github.com/facebook/facebook-php-business-sdk/blob/25.0.0/src/FacebookAds/Object/Page.php
+
+## Application content automation and analytics
+
+Content automation stores an opt-in rule per application, platform and category. Each rule selects a verified account, minimum spacing, daily post limit (UTC), trusted intake, optional branded image and performance guidance. Changes invalidate queued deliveries under the older rule version. Existing drafts are never swept into automation: use **Assess and schedule automatically** on a saved draft after confirming its facts. English is the automated default; explicit manual Hindi generation remains available.
+
+New content can be entered in Content automation or sent by an application backend to `POST /api/v1/content`, using its own Bearer token generated in that screen. Required JSON fields: `external_id`, `category` (`general` or `question` for automation), `channel`, `title`, `body`; optional `source_url`. Use a unique revision ID per item and one request per channel. Repeated identical requests are idempotent; changed content under the same ID returns 409. Tokens are hashed, application-scoped, and shown once; rotating revokes the previous token. The website backend integration must be installed separately: this feature does not automatically read another application's private database.
+
+Approved or explicitly trusted content is assessed by AI under existing provider budgets. Automatic output uses exact approved excerpts, with AI-selected angles and hashtags, rather than unverifiable new factual claims. Unmatched evidence, AI concerns, provider errors, missing media and channel restrictions hold the item with a visible reason. Exam announcements/results use the Research official-source workflow. An enabled matching `official` rule permits the initial source capture when evidence checks pass; source approval and content are rechecked before sending. Unreviewed AI images/videos still require visual review. YouTube requires an attached video, and WhatsApp requires recipient/template options; unsupported combinations are held, not converted silently.
+
+The existing scheduler also runs `hub:run-growth-workflow` each minute. It handles bounded content batches and refreshes published post metrics in batches (eligible every six hours, last 90 days). Analytics has application, platform and post filters and displays the latest lifetime counters, not sums of repeated snapshots. Facebook reactions/comments/shares, Instagram likes/comments, X public metrics, YouTube statistics and LinkedIn organization share statistics are requested where API permissions allow. Unavailable values remain unknown. LinkedIn personal analytics and WhatsApp delivery/read webhooks are not implemented.
+
+Automated links pointing to the configured application hostname receive UTM parameters and `hub_publication`. The application backend can report `visit`, `registration` or `conversion` to `POST /api/v1/events` with `external_id`, `name`, optional `publication_id`, and the same Bearer token. It must deduplicate genuine events and send no personal data. These reported events are distinct from platform impressions/clicks; there is no automatic proof of a genuine visitor. Links to official third-party sources are not altered. Manual posts and previously published links are unchanged.
+
+Performance guidance uses at least three posts on the same application/platform, published 1–30 days ago, with metrics no older than two days. It supplies examples to future content generation; different exposure and post ages mean these are tentative patterns, not causal claims or guaranteed improvements. It does not rewrite already published posts, fine-tune models, or automatically change configured limits/times.
+
+**Archive in Content Hub** is reversible and cancels queued publishing. It never deletes a platform post. Deleting a platform post does not erase local history; an unavailable analytics response may also mean permissions/privacy changed and does not trigger republishing. Running or uncertain submissions must be resolved before archive.

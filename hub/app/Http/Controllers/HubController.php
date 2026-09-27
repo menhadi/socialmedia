@@ -80,7 +80,8 @@ class HubController extends Controller
     public function posts(Request $r)
     {
         $brands = $this->brands($r)->orderBy('name')->get();
-        $query = Post::whereIn('brand_id', $brands->pluck('id'))->with('brand');
+        $query = Post::whereIn('brand_id', $brands->pluck('id'))->with(['brand', 'schedules']);
+        $r->boolean('archived') ? $query->whereNotNull('archived_at') : $query->whereNull('archived_at');
         if ($r->filled('brand')) {
             $query->where('brand_id', $r->integer('brand'));
         }
@@ -124,6 +125,7 @@ class HubController extends Controller
             $post->brand_id = $data['brand_id'];
             $post->status = 'draft';
             $post->reviewed_at = null;
+            $post->automation_reason = null;
             $post->save();
 
             return $post;

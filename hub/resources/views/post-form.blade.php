@@ -1,8 +1,16 @@
 @extends('layouts.app')
 @section('title',$post->exists?'Edit post':'Create post')
 @section('content')
-@php($locked = $post->exists && (!in_array($post->status,['draft','reviewed']) || $post->publications()->whereIn('status',['publishing','published','uncertain'])->exists() || $post->schedules()->whereIn('status',['running','uncertain'])->exists()))
+@php($locked = $post->exists && ($post->archived_at || !in_array($post->status,['draft','reviewed']) || $post->publications()->whereIn('status',['publishing','published','uncertain'])->exists() || $post->schedules()->whereIn('status',['running','uncertain'])->exists()))
 <div class="page-heading"><div><a class="back" href="{{ route('posts') }}">← Content library</a><h1>Make something worth sharing.</h1><p class="muted">Save a draft, refine your message and review it when ready.</p></div></div>
+@if($post->exists)
+<div class="notice"><strong>Automation & history</strong><p>{{ $post->automation_reason ?: 'No automatic schedule has been requested for this saved post.' }}</p>
+@if($post->learning_note)<p>{{ $post->learning_note }}</p>@endif
+@foreach($post->schedules()->latest()->limit(3)->get() as $entry)<p>{{ ucfirst($entry->status) }} · {{ $entry->scheduled_at->utc()->format('Y-m-d H:i') }} UTC · {{ $entry->reason }}</p>@endforeach
+<p><a href="{{ route('automation',['brand'=>$post->brand_id,'channel'=>$post->channel]) }}">Automation rules</a> · <a href="{{ route('analytics',['post'=>$post->id]) }}">Post analytics</a></p>
+@if(!$locked)<form method="post" action="{{ route('posts.assess',$post) }}">@csrf<label>Content category<select name="category"><option value="general">General</option><option value="question">Question / learning</option></select></label><label class="checkbox"><input type="checkbox" name="confirmed" value="1" required>I confirm the saved facts are accurate and authorize scheduling if checks pass.</label><button class="button secondary">Assess and schedule automatically</button></form>@endif
+<form method="post" action="{{ route('posts.archive',$post) }}">@csrf<p><button class="button secondary">{{ $post->archived_at?'Restore in Content Hub':'Archive in Content Hub' }}</button></p></form><p>Archiving cancels queued publishing and hides this local record. It never deletes the platform post. Platform deletion does not delete Content Hub history.</p></div>
+@endif
 @if($brands->isEmpty())
     <div class="panel empty"><h2>Add an application first.</h2><p>Every post belongs to an application, keeping its audience and voice clear.</p><a class="button" href="{{ route('applications.create') }}">Add application</a></div>
 @else

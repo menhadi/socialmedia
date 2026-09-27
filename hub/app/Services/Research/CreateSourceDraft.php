@@ -2,11 +2,14 @@
 
 namespace App\Services\Research;
 
+use App\Models\AutomationRule;
 use App\Models\ContentSource;
 use App\Models\Post;
 use App\Models\SourceSnapshot;
 use App\Models\User;
 use App\Services\Ai\GenerateContent;
+use App\Services\Analytics\PerformanceContext;
+use App\Services\Automation\RunAutomation;
 use App\Services\Media\GenerateMedia;
 use App\Services\Social\SchedulePost;
 use Illuminate\Support\Facades\DB;
@@ -22,6 +25,7 @@ class CreateSourceDraft
             return;
         }
         $source = $snapshot->source;
+        $automationRule = AutomationRule::where('brand_id', $source->brand_id)->where('channel', $source->channel)->where('category', 'official')->first();
         try {
             $generation = $this->ai->run(User::findOrFail($source->brand->user_id), $source->brand, [
                 'request_key' => (string) Str::uuid(), 'task' => 'research', 'title' => $source->topic,
@@ -29,6 +33,7 @@ class CreateSourceDraft
                 'source_text' => json_encode([
                     'primary_source' => mb_strcut($snapshot->text, 0, 14000, 'UTF-8'),
                     'comparison_source' => mb_strcut($snapshot->comparison_text ?? '', 0, 8000, 'UTF-8'),
+                    'performance_context' => $automationRule?->learn ? mb_strcut(json_encode(app(PerformanceContext::class)->build($source->brand, $source->channel)), 0, 4000, 'UTF-8') : null,
                 ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
             ]);
             $snapshot->update(['ai_generation_id' => $generation->id]);
@@ -48,7 +53,8 @@ class CreateSourceDraft
             $quotesMatch = mb_strlen($headline) >= 10 && mb_strlen($excerpt) >= 40
                 && str_contains($snapshot->text, $headline) && str_contains($snapshot->text, $excerpt);
             $reason = match (true) {
-                $baseline => 'Initial source capture: review this first post. Future source changes can use automatic publishing.',
+                $automationRule && (! $automationRule->enabled || $automationRule->social_account_id !== $source->social_account_id) => 'The official automation rule is disabled or selects a different account.',
+                $baseline && ! $automationRule => 'Initial source capture: review this first post. Future source changes can use automatic publishing.',
                 ! $source->approved_at => 'This source has not been approved as official.',
                 ! $quotesMatch => 'The selected quotes could not be matched exactly to the source.',
                 count($package['concerns']) > 0 => 'AI flagged missing, conflicting or unclear information. Check the source evidence.',
@@ -107,7 +113,7 @@ class CreateSourceDraft
                     return;
                 }
             }
-            DB::transaction(function () use ($post, $draftFingerprint, $image, $automatic, $source, $snapshot): void {
+            DB::transaction(function () use ($post, $draftFingerprint, $image, $automatic, $source, $snapshot, $automationRule): void {
                 $currentPost = Post::whereKey($post->id)->lockForUpdate()->firstOrFail();
                 if (! hash_equals($draftFingerprint, $currentPost->publishingFingerprint()) || $currentPost->status !== 'draft') {
                     $snapshot->update(['reason' => 'The post was edited during generation. Review the saved version.']);
@@ -117,7 +123,11 @@ class CreateSourceDraft
                 $currentPost->forceFill($image)->save();
                 if ($automatic) {
                     $currentPost->forceFill(['status' => 'reviewed', 'reviewed_at' => now()])->save();
-                    $this->scheduler->create($currentPost, (int) $source->social_account_id, now()->addMinutes($source->delay_minutes), true, $snapshot);
+                    if ($automationRule) {
+                        app(RunAutomation::class)->queue($currentPost, $automationRule, $snapshot);
+                    } else {
+                        $this->scheduler->create($currentPost, (int) $source->social_account_id, now()->addMinutes($source->delay_minutes), true, $snapshot);
+                    }
                     $snapshot->update(['status' => 'scheduled', 'reason' => 'Exact official-source excerpts scheduled under this source’s automatic publishing setting.']);
                 }
             }, 3);

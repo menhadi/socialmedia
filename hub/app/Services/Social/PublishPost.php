@@ -2,6 +2,7 @@
 
 namespace App\Services\Social;
 
+use App\Models\AutomationRule;
 use App\Models\Post;
 use App\Models\Publication;
 use App\Models\SocialAccount;
@@ -58,6 +59,12 @@ class PublishPost
             if (isset($data['credential_version']) && $account->credential_version !== $data['credential_version']) {
                 throw ValidationException::withMessages(['post' => 'The account connection changed.']);
             }
+            if ($activeSchedule) {
+                AutomationRule::assertSchedule($activeSchedule);
+            }
+            if ($post->archived_at) {
+                throw new \RuntimeException('Post archived.');
+            }
             if ($activeSchedule?->automatic) {
                 $snapshot = $activeSchedule->snapshot;
                 $source = $snapshot?->source()->lockForUpdate()->first();
@@ -86,6 +93,18 @@ class PublishPost
                 'image_path' => $post->image_path,
                 'video_path' => $post->video_path,
             ])->save();
+            if ($activeSchedule?->automation_rule_id && $publication->link && parse_url($publication->link, PHP_URL_HOST) === parse_url($post->brand->website ?? '', PHP_URL_HOST)) {
+                $parts = parse_url($publication->link);
+                parse_str($parts['query'] ?? '', $query);
+                $query = array_merge($query, ['utm_source' => $post->channel, 'utm_medium' => 'social', 'utm_campaign' => 'content-hub', 'hub_publication' => (string) $publication->id]);
+                $tracked = preg_replace('/[?#].*$/', '', $publication->link).'?'.http_build_query($query).(isset($parts['fragment']) ? '#'.$parts['fragment'] : '');
+                $message = str_replace($publication->link, $tracked, $publication->message);
+                $checked = clone $post;
+                $checked->body = $message;
+                $checked->source_url = $tracked;
+                ChannelRules::validate($checked, true, $options);
+                $publication->forceFill(['link' => $tracked, 'message' => $message])->save();
+            }
             $post->status = 'publishing';
             $post->save();
 
@@ -141,6 +160,16 @@ class PublishPost
                 $this->finish($publication, ['status' => 'uncertain', 'error_code' => 'platform_response']);
 
                 return;
+            }
+            $growthSchedule = $publication->post->schedules()->where('request_key', $publication->request_key)->first();
+            if ($growthSchedule) {
+                try {
+                    AutomationRule::assertSchedule($growthSchedule);
+                } catch (\RuntimeException) {
+                    $this->finish($publication, ['status' => 'failed', 'error_code' => 'platform_approval']);
+
+                    return;
+                }
             }
             $account = $publication->account;
             if (! $account || ! $account->verified_at || ! $account->access_token || $account->credential_version !== $publication->credential_version) {

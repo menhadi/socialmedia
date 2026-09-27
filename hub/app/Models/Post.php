@@ -14,7 +14,7 @@ class Post extends Model
 
     protected function casts(): array
     {
-        return ['reviewed_at' => 'datetime'];
+        return ['reviewed_at' => 'datetime', 'archived_at' => 'datetime'];
     }
 
     public function brand()
@@ -44,6 +44,9 @@ class Post extends Model
 
     public function assertEditable(): void
     {
+        if ($this->archived_at) {
+            throw ValidationException::withMessages(['post' => 'Restore this archived post before editing or scheduling.']);
+        }
         if ($this->schedules()->whereIn('status', ['running', 'processing', 'uncertain'])->exists()) {
             throw ValidationException::withMessages(['post' => 'A scheduled submission is running. Check the schedule before editing.']);
         }
