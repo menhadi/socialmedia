@@ -6,6 +6,7 @@
 <div class="panel form-panel"><h2>Application events · last 30 days</h2><p>Reported by your application's backend integration. These are separate from social impressions and clicks.</p>@forelse($totals as $name=>$total)<p><strong>{{ ucfirst($name) }}:</strong> {{ $total }}</p>@empty<p>No events received for this filter. Connect your application under <a href="{{ route('automation') }}">Content automation</a>.</p>@endforelse</div>
 @forelse($publications as $publication)
 <div class="panel form-panel"><h2><a href="{{ route('posts.edit',$publication->post) }}">{{ $publication->post->title }}</a></h2><p>{{ $publication->post->brand->name }} · {{ \App\Models\Post::CHANNELS[$publication->provider]??$publication->provider }} · Post #{{ $publication->post_id }} · Publication #{{ $publication->id }}</p>
+@if($publication->remote_deleted_at)<div class="notice">Platform removal recorded {{ $publication->remote_deleted_at->utc()->format('d M Y H:i') }} UTC. Metrics below are historical.</div>@endif
 @php($snapshot=$publication->latestAnalytics)
 <p><strong>{{ $snapshot?->status ?? 'Awaiting first collection' }}</strong>@if($snapshot) · Checked {{ $snapshot->created_at->utc()->format('Y-m-d H:i') }} UTC @endif</p>
 @if($snapshot?->metrics)<div class="form-grid">@foreach($snapshot->metrics as $name=>$count)<div><strong>{{ number_format($count) }}</strong> {{ ucfirst($name) }}</div>@endforeach</div>@endif

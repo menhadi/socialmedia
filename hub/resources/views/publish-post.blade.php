@@ -59,7 +59,9 @@
     <section class="panel preview">
         <div class="section-heading"><h3>{{ $publication->page_name }} · {{ $publication->page_id }}</h3><span class="badge {{ $publication->status }}">{{ ucfirst($publication->status) }}</span></div>
         <p class="muted small">Submitted {{ $publication->created_at->format('d M Y, H:i') }} UTC</p>
-        @if($publication->status==='published')
+        @if($publication->remote_deleted_at)
+            <div class="notice"><strong>Removed from platform</strong><p>Recorded {{ $publication->remote_deleted_at->utc()->format('d M Y H:i') }} UTC via {{ $publication->deletion_origin }}. Local history is retained.</p></div>
+        @elseif($publication->status==='published')
             <p>The platform accepted this submission. Video processing or WhatsApp delivery may still be pending. Reference: <code>{{ $publication->remote_post_id }}</code></p>
             @if($publication->permalink_url)
                 <a class="button secondary" href="{{ $publication->permalink_url }}" target="_blank" rel="noopener noreferrer">View on platform ↗</a>
@@ -72,6 +74,7 @@
         @else
             <div class="notice {{ $publication->status==='failed'?'error':'' }}"><strong>{{ $publication->status==='failed'?'Submission rejected':'Outcome needs checking' }}</strong><p>{{ \App\Services\Social\FacebookFailure::description($publication->error_code) }}</p>@if($publication->status==='uncertain')<p>The platform may have created the post. This record stays locked to prevent a duplicate. Check the destination directly and contact the workspace administrator to reconcile the result.</p>@endif</div>
         @endif
+        @if($publication->status==='published')<p><a class="button secondary" href="{{ route('publications.delete.preview',$publication) }}">{{ $publication->remote_deleted_at?'Deletion history':'Delete from platform / record removal' }}</a></p>@endif
         <details class="usage-note"><summary>View submitted content</summary>@if($publication->provider==='whatsapp')<p>Recipient: {{ $publication->options['recipient'] ?? '' }} · {{ $publication->options['mode'] ?? '' }}</p>@if(($publication->options['mode'] ?? '')==='template')<p>Template: {{ $publication->options['template_name'] }} ({{ $publication->options['template_language'] }})</p><pre>{{ $publication->options['template_values'] ?? 'No body parameters' }}</pre><p>Draft reference below; the approved template above was sent instead.</p>@endif @endif<div class="post-body">{{ $publication->message }}</div>@if($publication->link)<a class="source-link" href="{{ $publication->link }}" target="_blank" rel="noopener noreferrer">{{ $publication->link }}</a>@else<p class="muted small">No separate link attached.</p>@endif</details>
     </section>
 @empty

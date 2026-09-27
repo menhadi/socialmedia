@@ -10,7 +10,7 @@ class PerformanceContext
     public function build(Brand $brand, string $channel): array
     {
         $examples = [];
-        foreach (Publication::where('provider', $channel)->where('status', 'published')->where('published_at', '>=', now()->subDays(30))->where('published_at', '<=', now()->subDay())->whereHas('post', fn ($q) => $q->where('brand_id', $brand->id))->with('latestAnalytics')->latest('published_at')->limit(30)->get() as $publication) {
+        foreach (Publication::where('provider', $channel)->where('status', 'published')->whereNull('remote_deleted_at')->where('published_at', '>=', now()->subDays(30))->where('published_at', '<=', now()->subDay())->whereHas('post', fn ($q) => $q->where('brand_id', $brand->id))->with('latestAnalytics')->latest('published_at')->limit(30)->get() as $publication) {
             $snapshot = $publication->latestAnalytics;
             if (! $snapshot || $snapshot->status !== 'available' || $snapshot->created_at->lt(now()->subDays(2))) {
                 continue;

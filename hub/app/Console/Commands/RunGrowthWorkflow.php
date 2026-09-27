@@ -30,7 +30,7 @@ class RunGrowthWorkflow extends Command
                     return self::SUCCESS;
                 }
             }
-            foreach (Publication::where('status', 'published')->where('published_at', '>=', now()->subDays(90))->whereDoesntHave('latestAnalytics', fn ($q) => $q->where('created_at', '>', now()->subHours(6)))->oldest('published_at')->limit(3)->get() as $publication) {
+            foreach (Publication::where('status', 'published')->whereNull('remote_deleted_at')->where('published_at', '>=', now()->subDays(90))->whereDoesntHave('latestAnalytics', fn ($q) => $q->where('created_at', '>', now()->subHours(6)))->oldest('published_at')->limit(3)->get() as $publication) {
                 $analytics->run($publication);
                 if (microtime(true) - $start > 50) {
                     break;

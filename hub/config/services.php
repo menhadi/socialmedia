@@ -2,7 +2,7 @@
 
 return [
 
-    'facebook' => ['version' => env('FACEBOOK_GRAPH_VERSION', 'v25.0')],
+    'facebook' => ['version' => env('FACEBOOK_GRAPH_VERSION', 'v25.0'), 'app_secret' => env('FACEBOOK_APP_SECRET'), 'webhook_verify_token' => env('FACEBOOK_WEBHOOK_VERIFY_TOKEN')],
     'linkedin' => ['version' => env('LINKEDIN_API_VERSION', '202606')],
 
     /*

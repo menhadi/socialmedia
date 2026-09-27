@@ -17,7 +17,7 @@ class CollectAnalytics
         }
         try {
             $publication->refresh();
-            if ($publication->status !== 'published' || ! $publication->remote_post_id) {
+            if ($publication->remote_deleted_at || $publication->status !== 'published' || ! $publication->remote_post_id) {
                 return;
             }
             if (AnalyticsSnapshot::where('publication_id', $publication->id)->where('created_at', '>', now()->subMinutes(30))->exists()) {

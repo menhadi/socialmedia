@@ -5,10 +5,12 @@ use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\ApplicationIntakeController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AutomationController;
+use App\Http\Controllers\FacebookWebhookController;
 use App\Http\Controllers\HubController;
 use App\Http\Controllers\MediaController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\PublicationController;
+use App\Http\Controllers\PublicationDeletionController;
 use App\Http\Controllers\PublishingAssetController;
 use App\Http\Controllers\ResearchController;
 use App\Http\Controllers\ScheduleController;
@@ -22,6 +24,10 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 });
 Route::middleware('auth')->group(function () {
+    Route::get('/publications/{publication}/delete', [PublicationDeletionController::class, 'preview'])->name('publications.delete.preview');
+    Route::post('/publications/{publication}/delete', [PublicationDeletionController::class, 'destroy'])->middleware('throttle:5,1')->name('publications.delete');
+    Route::post('/publications/{publication}/external-removal', [PublicationDeletionController::class, 'external'])->middleware('throttle:5,1')->name('publications.external-removal');
+
     Route::get('/automation', [AutomationController::class, 'index'])->name('automation');
     Route::post('/automation/rules', [AutomationController::class, 'save'])->name('automation.save');
     Route::post('/automation/content', [ApplicationIntakeController::class, 'manual'])->name('automation.content');
@@ -84,3 +90,6 @@ Route::middleware('auth')->group(function () {
 
 Route::post('/api/v1/content', [ApplicationIntakeController::class, 'store'])->middleware('throttle:30,1');
 Route::post('/api/v1/events', [ApplicationIntakeController::class, 'event'])->middleware('throttle:120,1');
+
+Route::get('/webhooks/facebook', [FacebookWebhookController::class, 'verify']);
+Route::post('/webhooks/facebook', [FacebookWebhookController::class, 'receive'])->middleware('throttle:120,1');

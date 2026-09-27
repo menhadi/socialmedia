@@ -27,7 +27,7 @@ class PublicationController extends Controller
             ->whereNotNull('verified_at')->whereNotNull('access_token')->orderBy('page_name')->get();
         $publications = $post->publications()->latest()->get();
         $activeSchedule = $post->schedules()->whereIn('status', ['queued', 'running', 'processing', 'uncertain'])->first();
-        $ready = $post->status === 'reviewed' && $post->reviewed_at && ChannelRules::supported($post->channel)
+        $ready = ! $post->archived_at && $post->status === 'reviewed' && $post->reviewed_at && ChannelRules::supported($post->channel)
             && ! $publications->contains(fn (Publication $publication): bool => in_array($publication->status, ['publishing', 'published', 'uncertain'], true));
 
         return view('publish-post', [
@@ -59,7 +59,7 @@ class PublicationController extends Controller
     public function refreshLink(Request $request, Publication $publication, PlatformClient $client): RedirectResponse
     {
         $this->own($request, $publication->post);
-        abort_unless($publication->status === 'published' && $publication->remote_post_id, 422);
+        abort_unless($publication->status === 'published' && ! $publication->remote_deleted_at && $publication->remote_post_id, 422);
         $account = $publication->account;
         if (! $account->access_token) {
             return back()->withErrors(['connection' => 'Save and verify an access token in Social accounts first.']);
