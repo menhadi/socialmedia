@@ -13,6 +13,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class AutomationController extends Controller
@@ -29,6 +30,11 @@ class AutomationController extends Controller
         $brand = Brand::where('user_id', $r->user()->id)->findOrFail($r->integer('brand_id'));
         $data = $r->validate(['channel' => ['required', Rule::in(['facebook', 'instagram', 'linkedin', 'x', 'youtube', 'whatsapp'])], 'category' => 'required|in:general,question,official', 'social_account_id' => ['required', Rule::exists('social_accounts', 'id')->where('brand_id', $brand->id)->where('provider', $r->input('channel'))], 'delay_minutes' => 'required|integer|min:5|max:10080', 'daily_limit' => 'required|integer|min:1|max:20']);
         $options = ChannelRules::options($data['channel'], $r->input('options', []));
+        $workflow = $r->validate(['workflow' => 'sometimes|required|in:review,automatic', 'media_kind' => 'sometimes|required|in:none,image,video', 'aspect_ratio' => 'sometimes|required|in:16:9,9:16,1:1']);
+        if (($workflow['media_kind'] ?? '') === 'video' && ($workflow['aspect_ratio'] ?? '') === '1:1') {
+            throw ValidationException::withMessages(['aspect_ratio' => 'Choose landscape or portrait for video.']);
+        }
+        $options += $workflow + ['workflow' => 'review', 'media_kind' => 'none', 'aspect_ratio' => '16:9'];
         DB::transaction(function () use ($brand, $data, $r, $options): void {
             Brand::whereKey($brand->id)->lockForUpdate()->firstOrFail();
             $rule = AutomationRule::firstOrNew(['brand_id' => $brand->id, 'channel' => $data['channel'], 'category' => $data['category']]);
@@ -67,6 +73,6 @@ class AutomationController extends Controller
             $post->forceFill(['archived_at' => $post->archived_at ? null : now()])->save();
         });
 
-        return back()->with('success','Archive state updated in Content Hub only. No platform post was deleted. Restoring does not requeue publishing.');
+        return back()->with('success', 'Archive state updated in Content Hub only. No platform post was deleted. Restoring does not requeue publishing.');
     }
 }

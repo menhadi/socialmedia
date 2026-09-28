@@ -16,7 +16,7 @@ class MediaGeneration extends Model
 
     protected function casts(): array
     {
-        return ['api_key' => 'encrypted', 'started_at' => 'datetime', 'checked_at' => 'datetime'];
+        return ['api_key' => 'encrypted', 'started_at' => 'datetime', 'checked_at' => 'datetime', 'automation_context' => 'array'];
     }
 
     public function post(): BelongsTo

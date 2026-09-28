@@ -68,7 +68,7 @@ class CreateSourceDraft
 
                 return;
             }
-            $automatic = $reason === null && $source->enabled && $source->auto_publish && in_array($source->channel, ['facebook', 'instagram', 'linkedin', 'x'], true);
+            $automatic = $reason === null && $source->enabled && $source->auto_publish && (in_array($source->channel, ['facebook', 'instagram', 'linkedin', 'x'], true) || ($automationRule && $source->channel === 'youtube'));
             $hashtags = array_filter($package['hashtags'], fn ($tag) => is_string($tag) && preg_match('/^#[\p{L}\p{N}_]{1,40}$/uD', $tag));
             $body = $automatic ? $headline."\n\n".$excerpt."\n\nSource: ".$snapshot->url
                 : trim($package['caption'])."\n\n".implode(' ', array_slice($hashtags, 0, 5))."\n\nSource: ".$snapshot->url;
@@ -93,12 +93,24 @@ class CreateSourceDraft
             $generation->post_id = $post->id;
             $generation->save();
             $draftFingerprint = $post->publishingFingerprint();
+            if ($automatic && $automationRule && ($automationRule->options['media_kind'] ?? 'none') !== 'none') {
+                app(RunAutomation::class)->queue($post, $automationRule, $snapshot);
+                $snapshot->update(['reason' => $post->fresh()->automation_reason]);
+
+                return;
+            }
             if (in_array($source->media_kind, ['image', 'video'], true)) {
-                app(GenerateMedia::class)->reserve(User::findOrFail($source->brand->user_id), $post, [
+                $media = app(GenerateMedia::class)->reserve(User::findOrFail($source->brand->user_id), $post, [
                     'request_key' => (string) Str::uuid(), 'fingerprint' => $draftFingerprint,
                     'kind' => $source->media_kind, 'aspect_ratio' => '16:9',
                     'prompt' => 'Create a professional illustrative visual supporting the saved post. Do not invent facts, official seals, exam dates or results. Avoid small text.',
                 ]);
+                if ($automatic && $automationRule && ($automationRule->options['workflow'] ?? 'automatic') === 'automatic') {
+                    $media->update(['automation_context' => ['rule_id' => $automationRule->id, 'version' => $automationRule->version, 'snapshot_id' => $snapshot->id]]);
+                    $snapshot->update(['reason' => 'Media queued for automatic attachment and scheduling after checks.']);
+
+                    return;
+                }
                 $snapshot->update(['reason' => 'AI media queued. Open the draft’s AI media page to review and attach it, then review and schedule the post.']);
 
                 return;
@@ -124,7 +136,11 @@ class CreateSourceDraft
                 if ($automatic) {
                     $currentPost->forceFill(['status' => 'reviewed', 'reviewed_at' => now()])->save();
                     if ($automationRule) {
-                        app(RunAutomation::class)->queue($currentPost, $automationRule, $snapshot);
+                        if (! app(RunAutomation::class)->queue($currentPost, $automationRule, $snapshot)) {
+                            $snapshot->update(['reason' => $currentPost->fresh()->automation_reason]);
+
+                            return;
+                        }
                     } else {
                         $this->scheduler->create($currentPost, (int) $source->social_account_id, now()->addMinutes($source->delay_minutes), true, $snapshot);
                     }

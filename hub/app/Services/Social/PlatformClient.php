@@ -16,7 +16,8 @@ class PlatformClient
 
     private function request(SocialAccount $account): PendingRequest
     {
-        $request = Http::withToken($account->access_token)->acceptJson()->connectTimeout(5)->timeout(60)->withoutRedirecting();
+        $token = $account->provider === 'youtube' ? app(YouTubeToken::class)->accessToken($account) : $account->access_token;
+        $request = Http::withToken($token)->acceptJson()->connectTimeout(5)->timeout(60)->withoutRedirecting();
         if ($account->provider === 'linkedin') {
             $request->withHeaders(['LinkedIn-Version' => config('services.linkedin.version'), 'X-Restli-Protocol-Version' => '2.0.0']);
         }

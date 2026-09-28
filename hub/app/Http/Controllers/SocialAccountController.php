@@ -58,6 +58,7 @@ class SocialAccountController extends Controller
                 'brand_id' => $brand->id, 'provider' => $data['provider'], 'page_id' => $data['page_id'],
                 'display_name' => $data['display_name'] ?? null, 'access_token' => $data['access_token'] ?? null,
                 'settings' => AccountSetup::settings($data['provider'], $data),
+                'oauth_credentials' => $this->oauthCredentials($data),
                 'credential_version' => (string) Str::uuid(),
             ])->save();
         }, 5);
@@ -84,6 +85,8 @@ class SocialAccountController extends Controller
                     throw ValidationException::withMessages(['page_id' => 'This account is already saved for this application. Edit its setup below.']);
                 }
                 $account->page_id = $data['page_id'];
+                $account->oauth_credentials = null;
+                $account->token_expires_at = null;
                 $account->page_name = null;
                 $account->verified_at = null;
                 $account->error_code = null;
@@ -100,10 +103,18 @@ class SocialAccountController extends Controller
                 $account->error_code = null;
             }
             if (! empty($data['access_token'])) {
+                $account->oauth_credentials = null;
+                $account->token_expires_at = null;
                 $account->access_token = $data['access_token'];
                 $account->credential_version = (string) Str::uuid();
                 $account->verified_at = null;
                 $account->error_code = null;
+            }
+            if ($credentials = $this->oauthCredentials($data)) {
+                $account->oauth_credentials = $credentials;
+                $account->token_expires_at = null;
+                $account->credential_version = (string) Str::uuid();
+                $account->verified_at = null;
             }
             $account->save();
         }, 5);
@@ -116,7 +127,7 @@ class SocialAccountController extends Controller
     public function verify(Request $request, SocialAccount $account, PlatformClient $client): RedirectResponse
     {
         $this->own($request, $account);
-        if (! $account->access_token) {
+        if (! $account->access_token && ! $account->oauth_credentials) {
             throw ValidationException::withMessages(['access_token' => 'Save an access token first.']);
         }
         $name = null;
@@ -154,10 +165,20 @@ class SocialAccountController extends Controller
             $account = SocialAccount::whereKey($account->id)->lockForUpdate()->firstOrFail();
             $account->forceFill([
                 'access_token' => null, 'credential_version' => (string) Str::uuid(),
+                'oauth_credentials' => null, 'token_expires_at' => null,
                 'verified_at' => null, 'error_code' => null,
             ])->save();
         }, 5);
 
         return back()->with('success', 'Token removed. New submissions are blocked; submissions already started may still complete. Publishing history is preserved.');
+    }
+
+    private function oauthCredentials(array $data): ?array
+    {
+        if (empty($data['youtube_refresh_token'])) {
+            return null;
+        }
+
+        return ['client_id' => $data['youtube_client_id'], 'client_secret' => $data['youtube_client_secret'], 'refresh_token' => $data['youtube_refresh_token']];
     }
 }

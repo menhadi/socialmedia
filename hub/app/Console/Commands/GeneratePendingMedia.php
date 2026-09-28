@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\MediaGeneration;
+use App\Services\Automation\CompleteAutomationMedia;
 use App\Services\Media\GenerateMedia;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
@@ -28,6 +29,9 @@ class GeneratePendingMedia extends Command
                 if (microtime(true) - $start > 120) {
                     break;
                 }
+            }
+            foreach (MediaGeneration::whereNotNull('automation_context')->whereIn('status', ['completed', 'failed', 'uncertain', 'cancelled'])->limit(20)->get() as $job) {
+                app(CompleteAutomationMedia::class)->run($job);
             }
             $this->info('Pending media checked.');
 

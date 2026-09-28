@@ -1,7 +1,7 @@
 @extends('layouts.app')
 @section('title','Content automation')
 @section('content')
-<div class="page-heading"><div><h1>Application content → scheduled posts</h1><p class="muted">Each rule belongs to one application, platform and category. English is the automation default. Only flagged content waits for review.</p></div></div>
+<div class="page-heading"><div><h1>Application content → reviewed or scheduled posts</h1><p class="muted">Choose normal admin review or automatic scheduling for each application, platform and category. English is the automation default. Flagged content always waits for review.</p></div></div>
 @php
 $selectedBrand = $brands->firstWhere('id',(int)request('brand')) ?? $brands->first();
 $channel = array_key_exists(request('channel','facebook'),\App\Models\Post::CHANNELS) && request('channel')!=='other' ? request('channel','facebook') : 'facebook';
@@ -15,11 +15,15 @@ $rule = $rules->first(fn($r)=>$r->brand_id===$selectedBrand?->id && $r->channel=
 <input type="hidden" name="brand_id" value="{{ $selectedBrand->id }}"><input type="hidden" name="channel" value="{{ $channel }}"><input type="hidden" name="category" value="{{ $category }}">
 <label>Publishing account<select name="social_account_id" required><option value="">Choose a verified account</option>@foreach($accounts->where('brand_id',$selectedBrand->id)->where('provider',$channel) as $account)<option value="{{ $account->id }}" @selected(old('social_account_id',$rule?->social_account_id)==$account->id)>{{ $account->page_name ?: $account->page_id }}{{ $account->verified_at?'':' (not verified)' }}</option>@endforeach</select></label>
 <div class="form-grid"><label>Minimum delay / spacing (minutes)<input type="number" min="5" max="10080" name="delay_minutes" value="{{ old('delay_minutes',$rule?->delay_minutes??30) }}" required></label><label>Maximum posts per UTC day for this rule<input type="number" min="1" max="20" name="daily_limit" value="{{ old('daily_limit',$rule?->daily_limit??3) }}" required></label></div>
-<label class="checkbox"><input type="checkbox" name="enabled" value="1" @checked(old('enabled',$rule?->enabled))>Enable automatic scheduling when checks pass</label>
+<label class="checkbox"><input type="checkbox" name="enabled" value="1" @checked(old('enabled',$rule?->enabled))>Enable this content workflow</label>
+<label>Publishing workflow<select name="workflow"><option value="review" @selected(old('workflow',$rule?->options['workflow'] ?? ($rule ? 'automatic' : 'review'))==='review')>Normal admin review before publishing</option><option value="automatic" @selected(old('workflow',$rule?->options['workflow'] ?? ($rule ? 'automatic' : 'review'))==='automatic')>Automatically schedule when checks pass; hold flagged content</option></select></label>
+<label>Generate media<select name="media_kind">@foreach(['none'=>'No AI media','image'=>'AI image','video'=>'8-second AI video'] as $value=>$label)<option value="{{ $value }}" @selected(old('media_kind',$rule?->options['media_kind'] ?? 'none')===$value)>{{ $label }}</option>@endforeach</select></label>
+<label>Media format<select name="aspect_ratio">@foreach(['16:9'=>'Landscape 16:9','9:16'=>'Portrait 9:16','1:1'=>'Square image'] as $value=>$label)<option value="{{ $value }}" @selected(old('aspect_ratio',$rule?->options['aspect_ratio'] ?? '16:9')===$value)>{{ $label }}</option>@endforeach</select></label>
+<p class="muted small">AI media uses the application's selected provider and shared media budget. Automatic mode authorizes generated media to be attached and scheduled without visual review. Content flags, provider failures and changed approvals hold publishing. These checks cannot guarantee visual accuracy; choose normal review when each visual needs inspection.</p>
 <label class="checkbox"><input type="checkbox" name="trust_intake" value="1" @checked(old('trust_intake',$rule?->trust_intake))>Trust content sent with this application's connector token</label>
 <label class="checkbox"><input type="checkbox" name="learn" value="1" @checked(old('learn',$rule?->learn??true))>Use this application's recent platform analytics to guide future content selection</label>
 <label class="checkbox"><input type="checkbox" name="with_image" value="1" @checked(old('with_image',$rule?->with_image))>Create a branded image for incoming general/question content</label>
-<p class="muted small">Existing drafts stay unchanged. You can assess a saved draft from its edit page. Official notices use Research source settings and evidence checks; this rule allows a verified first capture and controls its schedule. AI media that has not been reviewed remains held. Budget and channel validation still apply.</p>
+<p class="muted small">Existing drafts stay unchanged. You can assess a saved draft from its edit page. Official notices require approved Research sources and evidence checks. Normal review remains available on every saved post. Budget and channel validation still apply.</p>
 @php($post = new \App\Models\Post(['channel'=>$channel]))
 @if($rule?->options)<p class="notice">This rule has saved channel options. Re-enter the intended YouTube/WhatsApp options when updating it; saved recipient details are not printed here.</p>@endif
 @include('publishing-options')

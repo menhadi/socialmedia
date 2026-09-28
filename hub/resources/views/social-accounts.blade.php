@@ -43,9 +43,9 @@
         <div class="section-heading"><h2>{{ $account->display_name ?: ($account->page_name ?: $accountSetup['name']) }}</h2><span class="badge {{ $account->verified_at?'reviewed':'' }}">{{ $account->verified_at?'Identity verified':'Not tested' }}</span></div>
         <p class="muted small">{{ $account->brand->name }} · {{ $accountSetup['name'] }} · {{ $accountSetup['kind'] }}</p>
         <p class="small account-identifier">{{ $accountSetup['id_label'] }}: <strong>{{ $account->page_id }}</strong></p>
-        <div class="tags"><span>{{ $account->access_token?'Credentials saved':'Awaiting credentials' }}</span><span>Publishing available</span></div>
+        <div class="tags"><span>{{ ($account->access_token || $account->oauth_credentials)?'Credentials saved':'Awaiting credentials' }}</span><span>Publishing available</span></div>
         @if($account->error_code)<div class="notice error">{{ \App\Services\Social\FacebookFailure::description($account->error_code) }}</div>@endif
-        @if($account->access_token)
+        @if($account->access_token || $account->oauth_credentials)
             <form method="post" action="{{ route('social.verify',$account) }}">@csrf<button class="button secondary">Verify account</button></form>
         @endif
         <details class="usage-note">
@@ -58,7 +58,7 @@
                 <button class="button secondary">Save changes</button>
             </form>
         </details>
-        @if($account->access_token)
+        @if($account->access_token || $account->oauth_credentials)
             <details class="usage-note"><summary>Remove saved token</summary><p class="muted small">Clears the token from this workspace. The account details and publishing history remain. Any platform submission already started may still finish.</p><form method="post" action="{{ route('social.disconnect',$account) }}">@csrf @method('DELETE')<button class="button secondary">Remove saved token</button></form></details>
         @endif
     </section>

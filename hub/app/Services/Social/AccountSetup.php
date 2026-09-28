@@ -66,6 +66,9 @@ class AccountSetup
         return [
             'display_name' => 'nullable|string|max:100',
             'access_token' => ['nullable', 'string', 'max:4096', 'regex:/^\\S+$/uD'],
+            'youtube_client_id' => [$provider === 'youtube' ? 'nullable' : 'prohibited', 'required_with:youtube_client_secret,youtube_refresh_token', 'string', 'max:500'],
+            'youtube_client_secret' => [$provider === 'youtube' ? 'nullable' : 'prohibited', 'required_with:youtube_client_id,youtube_refresh_token', 'string', 'max:4096'],
+            'youtube_refresh_token' => [$provider === 'youtube' ? 'nullable' : 'prohibited', 'required_with:youtube_client_id,youtube_client_secret', 'string', 'max:4096'],
             'facebook_page_id' => [$provider === 'instagram' ? 'nullable' : 'prohibited', 'string', 'regex:/^[0-9]{1,50}$/D'],
             'login_method' => [$provider === 'instagram' ? 'nullable' : 'prohibited', 'in:facebook,instagram'],
             'business_account_id' => [$provider === 'whatsapp' ? 'nullable' : 'prohibited', 'string', 'regex:/^[0-9]{1,50}$/D'],

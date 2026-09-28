@@ -10,11 +10,11 @@ class SocialAccount extends Model
 {
     use HasFactory;
 
-    protected $hidden = ['access_token'];
+    protected $hidden = ['access_token', 'oauth_credentials'];
 
     protected function casts(): array
     {
-        return ['access_token' => 'encrypted', 'verified_at' => 'datetime', 'settings' => 'array'];
+        return ['access_token' => 'encrypted', 'oauth_credentials' => 'encrypted:array', 'token_expires_at' => 'datetime', 'verified_at' => 'datetime', 'settings' => 'array'];
     }
 
     public function brand(): BelongsTo

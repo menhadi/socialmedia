@@ -12,6 +12,7 @@ use App\Models\SourceSnapshot;
 use App\Models\User;
 use App\Services\Ai\GenerateContent;
 use App\Services\Analytics\PerformanceContext;
+use App\Services\Media\GenerateMedia;
 use App\Services\Research\FetchSource;
 use App\Services\Research\PostImage;
 use App\Services\Social\SchedulePost;
@@ -19,6 +20,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
 class RunAutomation
@@ -72,8 +74,8 @@ class RunAutomation
             if ($rule->with_image) {
                 $post->forceFill($this->images->create($post))->save();
             }
-            $this->queue($post, $rule);
-            $item->update(['status' => 'scheduled', 'reason' => 'Grounded excerpts scheduled; no review flags.']);
+            $scheduled = $this->queue($post, $rule);
+            $item->update(['status' => $scheduled ? 'scheduled' : (($rule->options['workflow'] ?? 'automatic') === 'review' ? 'review' : 'awaiting_media'), 'reason' => $post->fresh()->automation_reason]);
         } catch (\Throwable $e) {
             $reason = $this->reason($e);
             $item->update(['status' => 'held', 'reason' => $reason]);
@@ -134,15 +136,37 @@ class RunAutomation
         return $data;
     }
 
-    public function queue(Post $post, AutomationRule $rule, ?SourceSnapshot $snapshot = null): void
+    public function queue(Post $post, AutomationRule $rule, ?SourceSnapshot $snapshot = null, bool $mediaReady = false): bool
     {
-        DB::transaction(function () use ($post, $rule, $snapshot): void {
+        return DB::transaction(function () use ($post, $rule, $snapshot, $mediaReady): bool {
             $current = AutomationRule::whereKey($rule->id)->lockForUpdate()->firstOrFail();
             if (! $current->enabled || $current->version !== $rule->version) {
                 throw new \RuntimeException('Automation rule changed during generation.');
             }
             $post = Post::whereKey($post->id)->lockForUpdate()->firstOrFail();
             $post->assertEditable();
+            if ($rule->brand_id !== $post->brand_id || $rule->channel !== $post->channel) {
+                throw new \RuntimeException('Automation rule does not match this application and platform.');
+            }
+            $kind = $rule->options['media_kind'] ?? 'none';
+            if (! $mediaReady && in_array($kind, ['image', 'video'], true)) {
+                $job = app(GenerateMedia::class)->reserve(User::findOrFail($post->brand->user_id), $post, [
+                    'request_key' => (string) Str::uuid(), 'fingerprint' => $post->publishingFingerprint(),
+                    'kind' => $kind, 'aspect_ratio' => $rule->options['aspect_ratio'] ?? '16:9',
+                    'prompt' => 'Create illustrative artwork supporting the saved facts. No invented claims, dates, results, official seals or endorsements. Avoid text in the visual.',
+                ]);
+                if (($rule->options['workflow'] ?? 'automatic') === 'automatic') {
+                    $job->update(['automation_context' => ['rule_id' => $rule->id, 'version' => $rule->version, 'snapshot_id' => $snapshot?->id]]);
+                }
+                $post->forceFill(['automation_reason' => ($job->automation_context ? 'Awaiting media generation; automatic scheduling will recheck the rule and saved content.' : 'Media queued for normal admin review. Attach and approve the result before publishing.')])->save();
+
+                return false;
+            }
+            if (($rule->options['workflow'] ?? 'automatic') === 'review') {
+                $post->forceFill(['status' => 'draft', 'reviewed_at' => null, 'automation_reason' => 'Ready for normal admin review. Approve and publish or schedule manually.'])->save();
+
+                return false;
+            }
             $last = PostSchedule::where('automation_rule_id', $rule->id)->whereIn('status', ['queued', 'running', 'processing', 'published'])->max('scheduled_at');
             $when = now('UTC')->addMinutes($rule->delay_minutes);
             if ($last) {
@@ -161,6 +185,8 @@ class RunAutomation
             $schedule = $this->scheduler->create($post, (int) $rule->social_account_id, $when, true, $snapshot, $rule->options ?? []);
             $schedule->update(['automation_rule_id' => $rule->id, 'automation_version' => $rule->version]);
             $post->forceFill(['automation_reason' => 'Automatically scheduled for '.$when->utc()->format('Y-m-d H:i').' UTC; no review flags.'])->save();
+
+            return true;
         });
     }
 

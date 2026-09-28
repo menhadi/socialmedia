@@ -15,7 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: ['api/v1/content', 'api/v1/events', 'webhooks/facebook']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $exceptions->dontFlash(['api_key', 'access_token']);
+        $exceptions->dontFlash(['api_key', 'access_token', 'youtube_client_secret', 'youtube_refresh_token']);
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
