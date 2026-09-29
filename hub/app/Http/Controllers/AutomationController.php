@@ -30,7 +30,7 @@ class AutomationController extends Controller
         $brand = Brand::where('user_id', $r->user()->id)->findOrFail($r->integer('brand_id'));
         $data = $r->validate(['channel' => ['required', Rule::in(['facebook', 'instagram', 'linkedin', 'x', 'youtube', 'whatsapp'])], 'category' => 'required|in:general,question,official', 'social_account_id' => ['required', Rule::exists('social_accounts', 'id')->where('brand_id', $brand->id)->where('provider', $r->input('channel'))], 'delay_minutes' => 'required|integer|min:5|max:10080', 'daily_limit' => 'required|integer|min:1|max:20']);
         $options = ChannelRules::options($data['channel'], $r->input('options', []));
-        $workflow = $r->validate(['workflow' => 'sometimes|required|in:review,automatic', 'media_kind' => 'sometimes|required|in:none,image,video', 'aspect_ratio' => 'sometimes|required|in:16:9,9:16,1:1']);
+        $workflow = $r->validate(['workflow' => 'sometimes|required|in:review,automatic', 'media_kind' => 'sometimes|required|in:none,image,video', 'aspect_ratio' => 'sometimes|required|in:16:9,9:16,1:1', 'question_difficulty' => 'sometimes|required|in:any,hard']);
         if (($workflow['media_kind'] ?? '') === 'video' && ($workflow['aspect_ratio'] ?? '') === '1:1') {
             throw ValidationException::withMessages(['aspect_ratio' => 'Choose landscape or portrait for video.']);
         }

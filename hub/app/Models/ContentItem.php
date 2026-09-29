@@ -13,6 +13,6 @@ class ContentItem extends Model
 
     protected function casts(): array
     {
-        return ['approved' => 'boolean'];
+        return ['approved' => 'boolean', 'visual' => 'array'];
     }
 }

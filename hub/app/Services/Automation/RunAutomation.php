@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Ai\GenerateContent;
 use App\Services\Analytics\PerformanceContext;
 use App\Services\Media\GenerateMedia;
+use App\Services\Research\ContentVisual;
 use App\Services\Research\FetchSource;
 use App\Services\Research\PostImage;
 use App\Services\Social\SchedulePost;
@@ -43,13 +44,18 @@ class RunAutomation
 
             return;
         }
+        if ($item->category === 'question' && ($rule->options['question_difficulty'] ?? 'any') === 'hard' && ($item->visual['difficulty'] ?? null) !== 'hard') {
+            $item->update(['status' => 'held', 'reason' => 'This rule requires a source-labelled hard question with structured options.']);
+
+            return;
+        }
         if (! ContentItem::whereKey($item->id)->where('status', 'pending')->update(['status' => 'processing', 'updated_at' => now()])) {
             return;
         }
         try {
             $brand = Brand::findOrFail($item->brand_id);
             $context = $rule->learn ? $this->performance->build($brand, $item->channel) : ['note' => 'Performance learning disabled.', 'examples' => []];
-            $generation = $this->generate($brand, $item->channel, $item->title, 'autopilot', json_encode(['approved_content' => $item->body, 'performance' => ['note' => $context['note'], 'examples' => array_slice($context['examples'], 0, 8)]], JSON_THROW_ON_ERROR), 'intake-'.$item->id);
+            $generation = $this->generate($brand, $item->channel, $item->title, 'autopilot', json_encode(['approved_content' => $item->body, 'structured_visual' => $item->visual, 'performance' => ['note' => $context['note'], 'examples' => array_slice($context['examples'], 0, 8)]], JSON_THROW_ON_ERROR), 'intake-'.$item->id);
             $package = $this->package($generation);
             $headline = FetchSource::normalize($package['headline_quote'] ?? '');
             $excerpt = FetchSource::normalize($package['excerpt_quote'] ?? '');
@@ -59,8 +65,13 @@ class RunAutomation
             }
             $tags = array_filter($package['hashtags'] ?? [], fn ($v) => is_string($v) && preg_match('/^#[\p{L}\p{N}_]{1,30}$/uD', $v));
             $body = $headline."\n\n".$excerpt.($tags ? "\n\n".implode(' ', array_slice($tags, 0, 3)) : '');
+            if (($item->visual['type'] ?? '') === 'question') {
+                $body = app(ContentVisual::class)->caption('Try this question. Choose your answer, then open the source link to practise.', $item->visual);
+            } elseif (($item->visual['type'] ?? '') === 'chart') {
+                $body = $item->visual['heading']."\n".$item->visual['note']."\nExplore the chart and source details in the link.";
+            }
             $post = DB::transaction(function () use ($brand, $item, $body, $generation): Post {
-                $post = $brand->posts()->create(['title' => $item->title, 'channel' => $item->channel, 'body' => $body, 'source_url' => $item->source_url]);
+                $post = $brand->posts()->create(['title' => $item->title, 'channel' => $item->channel, 'body' => $body, 'source_url' => $item->source_url, 'visual' => $item->visual]);
                 $item->update(['post_id' => $post->id]);
                 $generation->post_id = $post->id;
                 $generation->save();
@@ -71,7 +82,7 @@ class RunAutomation
             if ($package['concerns']) {
                 throw new \RuntimeException('AI flagged missing, conflicting, unsafe, time-sensitive or unclear information. Review the content and its source.');
             }
-            if ($rule->with_image) {
+            if ($rule->with_image || $post->visual) {
                 $post->forceFill($this->images->create($post))->save();
             }
             $scheduled = $this->queue($post, $rule);
@@ -99,7 +110,7 @@ class RunAutomation
                 throw new \RuntimeException('Enable a matching automation rule first.');
             }
             $fingerprint = $post->publishingFingerprint();
-            $generation = $this->generate($post->brand, $post->channel, $post->title, 'assess', json_encode(['admin_confirmed_draft' => $post->body, 'reference_url' => $post->source_url], JSON_THROW_ON_ERROR), 'assess-'.$post->id.'-'.$fingerprint.'-'.$rule->version);
+            $generation = $this->generate($post->brand, $post->channel, $post->title, 'assess', json_encode(['admin_confirmed_draft' => $post->body, 'structured_visual' => $post->visual, 'reference_url' => $post->source_url], JSON_THROW_ON_ERROR), 'assess-'.$post->id.'-'.$fingerprint.'-'.$rule->version);
             $package = $this->package($generation);
             if ($package['concerns']) {
                 throw new \RuntimeException('AI flagged this draft. Check facts, dates, claims and suitability before reviewing manually.');
@@ -149,7 +160,13 @@ class RunAutomation
                 throw new \RuntimeException('Automation rule does not match this application and platform.');
             }
             $kind = $rule->options['media_kind'] ?? 'none';
-            if (! $mediaReady && in_array($kind, ['image', 'video'], true)) {
+            if ($rule->category === 'question' && ($rule->options['question_difficulty'] ?? 'any') === 'hard' && ($post->visual['difficulty'] ?? null) !== 'hard') {
+                throw new \RuntimeException('This rule requires a source-labelled hard question with structured options.');
+            }
+            if ($post->visual && ! $post->image_hash) {
+                $post->forceFill($this->images->create($post))->save();
+            }
+            if (! $post->visual && ! $mediaReady && in_array($kind, ['image', 'video'], true)) {
                 $job = app(GenerateMedia::class)->reserve(User::findOrFail($post->brand->user_id), $post, [
                     'request_key' => (string) Str::uuid(), 'fingerprint' => $post->publishingFingerprint(),
                     'kind' => $kind, 'aspect_ratio' => $rule->options['aspect_ratio'] ?? '16:9',

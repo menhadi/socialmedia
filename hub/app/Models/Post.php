@@ -10,11 +10,11 @@ class Post extends Model
 {
     public const CHANNELS = ['facebook' => 'Facebook', 'instagram' => 'Instagram', 'linkedin' => 'LinkedIn', 'x' => 'X', 'youtube' => 'YouTube', 'whatsapp' => 'WhatsApp Business', 'other' => 'Other'];
 
-    protected $fillable = ['title', 'channel', 'body', 'source_url'];
+    protected $fillable = ['title', 'channel', 'body', 'source_url', 'visual'];
 
     protected function casts(): array
     {
-        return ['reviewed_at' => 'datetime', 'archived_at' => 'datetime'];
+        return ['reviewed_at' => 'datetime', 'archived_at' => 'datetime', 'visual' => 'array'];
     }
 
     public function brand()
@@ -37,6 +37,9 @@ class Post extends Model
         $parts = [$this->id, $this->brand_id, $this->title, $this->channel, $this->body, $this->source_url, $this->reviewed_at?->toISOString(), $this->image_hash];
         if ($this->video_hash) {
             $parts[] = $this->video_hash;
+        }
+        if ($this->visual) {
+            $parts[] = $this->visual;
         }
 
         return hash('sha256', json_encode($parts, JSON_THROW_ON_ERROR));

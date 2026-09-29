@@ -17,6 +17,7 @@ use App\Services\Analytics\CollectAnalytics;
 use App\Services\Analytics\PerformanceContext;
 use App\Services\Automation\RunAutomation;
 use App\Services\Research\CreateSourceDraft;
+use App\Services\Research\PostImage;
 use App\Services\Social\SchedulePost;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
@@ -42,6 +43,38 @@ class GrowthWorkflowTest extends TestCase
     {
         Http::preventStrayRequests();
         Http::fake(['https://api.deepseek.com/*' => Http::response(['choices' => [['message' => ['content' => json_encode($overrides + ['headline_quote' => 'Study a little every day', 'excerpt_quote' => 'Study a little every day and review your notes.', 'hashtags' => ['#Study'], 'concerns' => []])], 'finish_reason' => 'stop']], 'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 100]])]);
+    }
+
+    public function test_structured_question_creates_card_with_short_caption_and_supplied_hashtags(): void
+    {
+        $rule = $this->setupRule(['category' => 'question', 'with_image' => false, 'options' => ['workflow' => 'review', 'media_kind' => 'image']]);
+        $this->fakeAi();
+        $visual = ['type' => 'question', 'question' => 'Study a little every day?', 'options' => ['Yes', 'No'], 'answer' => 1, 'exam' => 'GATE', 'year' => 2024, 'difficulty' => 'hard'];
+        $item = ContentItem::factory()->create(['brand_id' => $rule->brand_id, 'category' => 'question', 'approved' => true, 'body' => 'Study a little every day and review your notes.', 'visual' => $visual]);
+        $this->mock(PostImage::class)->shouldReceive('create')->once()->withArgs(fn (Post $post) => $post->visual === $visual)->andReturn(['image_path' => 'card.png', 'image_hash' => 'rendered']);
+
+        app(RunAutomation::class)->run($item);
+
+        $post = Post::findOrFail($item->fresh()->post_id);
+        $this->assertSame("Try this question. Choose your answer, then open the source link to practise.\n\n#GATE #Exam2024", $post->body);
+        $this->assertSame('rendered', $post->image_hash);
+        $this->assertSame('review', $item->fresh()->status);
+        $this->assertDatabaseCount('media_generations', 0);
+        $this->assertDatabaseCount('post_schedules', 0);
+    }
+
+    public function test_hard_question_rule_holds_missing_difficulty_before_ai_spend(): void
+    {
+        $rule = $this->setupRule(['category' => 'question', 'options' => ['question_difficulty' => 'hard']]);
+        Http::preventStrayRequests();
+        $item = ContentItem::factory()->create(['brand_id' => $rule->brand_id, 'category' => 'question', 'approved' => true]);
+
+        app(RunAutomation::class)->run($item);
+
+        $this->assertSame('held', $item->fresh()->status);
+        $this->assertStringContainsString('source-labelled hard', $item->fresh()->reason);
+        $this->assertDatabaseCount('ai_generations', 0);
+        Http::assertNothingSent();
     }
 
     public function test_intake_requires_token_and_deduplicates_without_trusting_client_approval(): void

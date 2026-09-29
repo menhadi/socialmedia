@@ -6,6 +6,7 @@ use App\Models\ApplicationEvent;
 use App\Models\Brand;
 use App\Models\ContentItem;
 use App\Models\Publication;
+use App\Services\Research\ContentVisual;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -51,6 +52,10 @@ class ApplicationIntakeController extends Controller
     private function saveItem(Request $r, Brand $brand, bool $approved): ContentItem
     {
         $data = $r->validate(['external_id' => 'required|string|max:150', 'category' => 'required|in:general,question,announcement,result', 'channel' => ['required', Rule::in(['facebook', 'instagram', 'linkedin', 'x', 'youtube', 'whatsapp'])], 'title' => 'required|string|max:200', 'body' => 'required|string|min:20|max:12000', 'source_url' => 'nullable|url:http,https|max:2048']);
+        $visual = app(ContentVisual::class)->validate($r->input('visual'), $data['source_url'] ?? null);
+        if ($visual) {
+            $data['visual'] = $visual;
+        }
         $fingerprint = hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
 
         return DB::transaction(function () use ($brand, $data, $fingerprint, $approved): ContentItem {
@@ -81,6 +86,6 @@ class ApplicationIntakeController extends Controller
             return $event;
         });
 
-        return response()->json(['id' => $event->id],$event->wasRecentlyCreated ? 201 : 200);
+        return response()->json(['id' => $event->id], $event->wasRecentlyCreated ? 201 : 200);
     }
 }

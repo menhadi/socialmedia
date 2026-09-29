@@ -8,6 +8,7 @@ use App\Models\Brand;
 use App\Models\MediaConnection;
 use App\Models\Post;
 use App\Models\SocialAccount;
+use App\Services\Research\ContentVisual;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -109,6 +110,9 @@ class HubController extends Controller
             'title' => 'required|string|max:200', 'channel' => ['required', Rule::in(array_keys(Post::CHANNELS))],
             'body' => 'required|string|max:20000', 'source_url' => 'nullable|url:http,https|max:2048',
         ]);
+        $visuals = app(ContentVisual::class);
+        $data['visual'] = $visuals->validate($r->input('visual'), $data['source_url'] ?? null);
+        $data['body'] = $visuals->caption($data['body'], $data['visual']);
         $post = DB::transaction(function () use ($post, $data): Post {
             if ($post) {
                 $post = Post::whereKey($post->id)->lockForUpdate()->firstOrFail();
@@ -140,6 +144,9 @@ class HubController extends Controller
         DB::transaction(function () use ($post): void {
             $post = Post::whereKey($post->id)->lockForUpdate()->firstOrFail();
             $post->assertEditable();
+            if ($post->visual && ! $post->image_hash) {
+                throw ValidationException::withMessages(['visual' => 'Create and inspect the content card before reviewing this post.']);
+            }
             $post->status = 'reviewed';
             $post->reviewed_at = now();
             $post->save();

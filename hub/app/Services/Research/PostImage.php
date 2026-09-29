@@ -24,14 +24,35 @@ class PostImage
             ."\n\n".'<span font_desc="Sans 18" foreground="#cbd5e1">'.$host.'</span>';
         $file = tempnam(sys_get_temp_dir(), 'hub-card-');
         try {
-            $process = new Process([$binary, '-limit', 'memory', '64MiB', '-limit', 'map', '128MiB',
+            $command = [$binary, '-limit', 'memory', '64MiB', '-limit', 'map', '128MiB',
                 '-background', '#102f35', '-size', '1040x', 'pango:'.$markup,
-                '-resize', '1040x740>', '-gravity', 'center', '-extent', '1200x900', 'png:'.$file]);
+                '-resize', '1040x740>', '-gravity', 'center', '-extent', '1200x900', 'png:'.$file];
+            if ($post->visual) {
+                $visuals = new ContentVisual;
+                $visual = $visuals->validate($post->visual, $post->source_url);
+                $layout = $visuals->layout($visual, $post->brand->name, $post->source_url);
+                $command = [$binary, '-limit', 'memory', '64MiB', '-limit', 'map', '128MiB', '-size', '1200x1200', 'xc:#f7fafc'];
+                foreach ($layout['panels'] as $panel) {
+                    array_push($command, '-fill', '#ffffff', '-stroke', '#d7e2e9', '-strokewidth', '2', '-draw', 'roundrectangle '.implode(',', $panel).',12,12');
+                }
+                array_push($command, '-stroke', 'none');
+                foreach ($layout['bars'] as $bar) {
+                    array_push($command, '-fill', '#157f79', '-draw', 'rectangle '.implode(',', $bar));
+                }
+                foreach ($layout['layers'] as [$x, $y, $width, $height, $font, $color, $text]) {
+                    if ($text === '') {
+                        continue;
+                    }
+                    array_push($command, '(', '-background', 'none', '-size', $width.'x', 'pango:<span font_desc="Sans '.$font.'" foreground="'.$color.'">'.$escape($text).'</span>', '-resize', $width.'x'.$height.'>', '+repage', ')', '-gravity', 'northwest', '-geometry', '+'.$x.'+'.$y, '-composite');
+                }
+                array_push($command, 'png:'.$file);
+            }
+            $process = new Process($command);
             $process->setTimeout(20);
             $process->mustRun();
             $bytes = file_get_contents($file);
             $size = getimagesizefromstring($bytes);
-            if (! $size || $size[0] !== 1200 || $size[1] !== 900 || strlen($bytes) > 4000000) {
+            if (! $size || $size[0] !== 1200 || $size[1] !== ($post->visual ? 1200 : 900) || strlen($bytes) > 4000000) {
                 throw new RuntimeException('Image rendering failed.');
             }
             $hash = hash('sha256', $bytes);
