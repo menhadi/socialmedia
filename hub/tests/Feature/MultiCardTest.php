@@ -77,6 +77,16 @@ class MultiCardTest extends TestCase
         Http::fake(['api.deepseek.com/*' => Http::response(['choices' => [['message' => ['content' => json_encode($plan)], 'finish_reason' => 'stop']], 'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 100]])]);
     }
 
+    public function test_caption_accepts_exact_selected_card_evidence_but_rejects_changed_facts(): void
+    {
+        $planner = new CardPlanner;
+        $cards = [['visual' => ['note' => 'Coverage differs between reporting years.']]];
+        $plan = $this->plan(['excerpt_quote' => 'Coverage differs between reporting years.']);
+        $this->assertStringContainsString($plan['excerpt_quote'], $planner->caption('The survey', $plan, $cards));
+        $this->expectException(ValidationException::class);
+        $planner->caption('The survey', $this->plan(['excerpt_quote' => 'Coverage is identical between reporting years.']), $cards);
+    }
+
     public function test_ai_selects_without_changing_source_values_and_rejects_bad_plans(): void
     {
         $planner = new CardPlanner;

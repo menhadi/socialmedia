@@ -8,11 +8,23 @@ use Illuminate\Validation\ValidationException;
 
 class CardPlanner
 {
-    public function caption(string $source, array $plan): string
+    public function caption(string $source, array $plan, array $selectedCards = []): string
     {
+        $evidence = [$source];
+        foreach ($selectedCards as $card) {
+            $visual = $card['visual'];
+            foreach (['heading', 'note', 'question'] as $key) {
+                if (is_string($visual[$key] ?? null)) {
+                    $evidence[] = $visual[$key];
+                }
+            }
+            foreach ($visual['rows'] ?? [] as $row) {
+                $evidence[] = $row;
+            }
+        }
         Validator::make($plan, ['headline_quote' => 'required|string|min:3|max:200', 'excerpt_quote' => 'required|string|min:20|max:3000', 'hashtags' => 'present|array|max:5', 'hashtags.*' => ['string', 'regex:/^#[\p{L}\p{N}_]{1,30}$/uD']])->validate();
         foreach (['headline_quote', 'excerpt_quote'] as $field) {
-            if (! str_contains($source, $plan[$field])) {
+            if (! collect($evidence)->contains(fn (string $text) => str_contains($text, $plan[$field]))) {
                 throw ValidationException::withMessages(['cards' => 'AI caption could not be matched to the supplied facts. Review required.']);
             }
         }

@@ -28,7 +28,7 @@ class CardPlanController extends Controller
             throw ValidationException::withMessages(['cards' => 'AI planning did not complete. Check provider limits and generation history.']);
         }
         $visual = $planner->select($post->card_sources, $plan, $post->channel);
-        $body = app(ContentVisual::class)->caption($planner->caption($post->body, $plan), $visual);
+        $body = app(ContentVisual::class)->caption($planner->caption($post->body, $plan, $visual['cards']), $visual);
         if ($post->brand->pyp_only) {
             app(ContentVisual::class)->assertPreviousYearQuestion($visual, $post->source_url);
         }
