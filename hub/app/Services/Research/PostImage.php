@@ -45,13 +45,8 @@ class PostImage
                 foreach ($layout['lines'] as $line) {
                     array_push($command, '-stroke', '#0891b2', '-strokewidth', '4', '-draw', 'line '.implode(',', $line));
                 }
-                foreach ($layout['dotted_lines'] as [$x1, $y1, $x2, $y2]) {
-                    $steps = max(1, (int) ceil(hypot($x2 - $x1, $y2 - $y1) / 12));
-                    for ($step = 1; $step < $steps; $step++) {
-                        $x = (int) round($x1 + ($x2 - $x1) * $step / $steps);
-                        $y = (int) round($y1 + ($y2 - $y1) * $step / $steps);
-                        array_push($command, '-stroke', 'none', '-fill', '#64748b', '-draw', 'circle '.$x.','.$y.','.($x + 2).','.$y);
-                    }
+                foreach ($layout['missing_markers'] as [$x, $y]) {
+                    array_push($command, '-stroke', '#b45309', '-strokewidth', '3', '-draw', 'line '.($x - 5).','.($y - 5).','.($x + 5).','.($y + 5), '-draw', 'line '.($x - 5).','.($y + 5).','.($x + 5).','.($y - 5));
                 }
                 foreach ($layout['points'] as [$x, $y]) {
                     array_push($command, '-stroke', '#ffffff', '-strokewidth', '2', '-fill', '#087f8c', '-draw', 'circle '.$x.','.$y.','.($x + 5).','.$y);

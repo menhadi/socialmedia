@@ -66,7 +66,7 @@ class ContentVisualTest extends TestCase
         $this->assertDatabaseCount('posts', 0);
     }
 
-    public function test_line_chart_retains_full_history_sorts_years_and_breaks_at_missing_values(): void
+    public function test_line_chart_retains_history_and_marks_missing_years_without_inventing_points(): void
     {
         $service = new ContentVisual;
         $data = ['type' => 'chart', 'chart_style' => 'line', 'heading' => 'Historical turnout', 'unit' => '%', 'labels' => ['2024', '2004', '2009', '2014', '2019', '1999', '1996', '1991'], 'values' => [70, 60, 62, null, 68, 58, 56, 54], 'note' => 'Source records. 2014 unavailable.'];
@@ -75,9 +75,9 @@ class ContentVisualTest extends TestCase
         $this->assertSame([54.0, 56.0, 58.0, 60.0, 62.0, null, 68.0, 70.0], $visual['values']);
         $layout = $service->layout($visual, 'Brand', 'https://example.com/data');
         $this->assertCount(7, $layout['points']);
-        $this->assertCount(5, $layout['lines']);
-        $this->assertSame([[$layout['points'][4][0], $layout['points'][4][1], $layout['points'][5][0], $layout['points'][5][1]]], $layout['dotted_lines']);
-        $this->assertContains('Dotted bridge = missing data between observations; no values estimated.', array_column($layout['layers'], 6));
+        $this->assertCount(6, $layout['lines']);
+        $this->assertSame([[792, 632]], $layout['missing_markers']);
+        $this->assertContains('× on year axis = data unavailable. Line bridges gaps; no value is estimated.', array_column($layout['layers'], 6));
         $this->assertSame(130, $layout['points'][0][0]);
         $this->assertSame(1080, $layout['points'][6][0]);
         $this->assertSame(382, $layout['points'][6][1]);
@@ -109,8 +109,8 @@ class ContentVisualTest extends TestCase
         $values[0] = $values[8] = $values[9] = $values[19] = null;
         $layout = $service->layout(['type' => 'chart', 'chart_style' => 'line', 'heading' => 'History', 'unit' => '%', 'labels' => range(2000, 2019), 'values' => $values, 'note' => 'Source data.'], 'Brand', 'https://example.com');
         $this->assertCount(16, $layout['points']);
-        $this->assertCount(14, $layout['lines']);
-        $this->assertCount(1, $layout['dotted_lines']);
+        $this->assertCount(15, $layout['lines']);
+        $this->assertSame([[130, 632], [530, 632], [580, 632], [1080, 632]], $layout['missing_markers']);
         $labels = array_values(array_filter($layout['layers'], fn ($layer) => $layer[6] === '50%'));
         $this->assertGreaterThan(2, count($labels));
         $this->assertLessThan(16, count($labels));
