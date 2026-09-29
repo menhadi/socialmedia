@@ -3,6 +3,7 @@
 namespace App\Services\Social;
 
 use App\Models\Post;
+use App\Services\Ai\CardPlanner;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
@@ -36,6 +37,21 @@ class ChannelRules
     {
         $post->assertContentPolicy();
         $fail = fn (string $message) => throw ValidationException::withMessages(['post' => $message]);
+        $cards = $post->card_images ?? [];
+        if (count($cards) > 1 && ! in_array($post->channel, ['facebook', 'instagram', 'linkedin', 'x'], true)) {
+            $fail('This channel does not support this multi-image workflow. Choose a single card or prepare a video.');
+        }
+        if (count($cards) > CardPlanner::limit($post->channel)) {
+            $fail('The card count exceeds this channel’s limit. Ask AI for a shorter plan.');
+        }
+        if ($cards && $post->video_path) {
+            $fail('A card set cannot be combined with a video.');
+        }
+        foreach ($cards as $card) {
+            if (! Storage::disk('local')->exists($card['path']) || Storage::disk('local')->size($card['path']) > 4000000 || ! hash_equals($card['hash'], hash('sha256', Storage::disk('local')->get($card['path'])))) {
+                $fail('A card is missing or changed. Regenerate and review the complete set.');
+            }
+        }
         if (! self::supported($post->channel)) {
             $fail('Choose a supported publishing channel.');
         }

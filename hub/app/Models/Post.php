@@ -15,7 +15,7 @@ class Post extends Model
 
     protected function casts(): array
     {
-        return ['reviewed_at' => 'datetime', 'archived_at' => 'datetime', 'visual' => 'array'];
+        return ['reviewed_at' => 'datetime', 'archived_at' => 'datetime', 'visual' => 'array', 'card_images' => 'array', 'card_sources' => 'array'];
     }
 
     public function brand()
@@ -42,6 +42,12 @@ class Post extends Model
         if ($this->visual) {
             $parts[] = $this->visual;
         }
+        if ($this->card_images) {
+            $parts[] = $this->card_images;
+        }
+        if ($this->card_sources) {
+            $parts[] = $this->card_sources;
+        }
 
         return hash('sha256', json_encode($parts, JSON_THROW_ON_ERROR));
     }
@@ -61,6 +67,9 @@ class Post extends Model
 
     public function assertContentPolicy(): void
     {
+        if (($this->visual['type'] ?? '') === 'collection' && count($this->card_images ?? []) !== count($this->visual['cards'])) {
+            throw ValidationException::withMessages(['visual' => 'Generate all cards and review the complete set before publishing.']);
+        }
         if ($this->brand()->value('pyp_only')) {
             app(ContentVisual::class)->assertPreviousYearQuestion($this->visual, $this->source_url);
             if (! $this->image_hash) {

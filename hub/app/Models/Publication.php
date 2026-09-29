@@ -14,7 +14,7 @@ class Publication extends Model
 
     protected function casts(): array
     {
-        return ['remote_deleted_at' => 'datetime', 'published_at' => 'datetime', 'options' => 'encrypted:array', 'transfer' => 'encrypted:array', 'next_check_at' => 'datetime'];
+        return ['remote_deleted_at' => 'datetime', 'published_at' => 'datetime', 'options' => 'encrypted:array', 'transfer' => 'encrypted:array', 'next_check_at' => 'datetime', 'card_images' => 'array'];
     }
 
     public function deletions(): HasMany

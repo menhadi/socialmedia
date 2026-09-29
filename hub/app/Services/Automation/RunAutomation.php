@@ -10,6 +10,7 @@ use App\Models\Post;
 use App\Models\PostSchedule;
 use App\Models\SourceSnapshot;
 use App\Models\User;
+use App\Services\Ai\CardPlanner;
 use App\Services\Ai\GenerateContent;
 use App\Services\Analytics\PerformanceContext;
 use App\Services\Media\GenerateMedia;
@@ -44,7 +45,7 @@ class RunAutomation
 
             return;
         }
-        if ($item->category === 'question' && ($rule->options['question_difficulty'] ?? 'any') === 'hard' && ($item->visual['difficulty'] ?? null) !== 'hard') {
+        if ($item->category === 'question' && ($rule->options['question_difficulty'] ?? 'any') === 'hard' && ! app(ContentVisual::class)->isHardQuestion($item->visual)) {
             $item->update(['status' => 'held', 'reason' => 'This rule requires a source-labelled hard question with structured options.']);
 
             return;
@@ -58,8 +59,11 @@ class RunAutomation
                 app(ContentVisual::class)->assertPreviousYearQuestion($item->visual, $item->source_url);
             }
             $context = $rule->learn ? $this->performance->build($brand, $item->channel) : ['note' => 'Performance learning disabled.', 'examples' => []];
-            $generation = $this->generate($brand, $item->channel, $item->title, 'autopilot', json_encode(['approved_content' => $item->body, 'structured_visual' => $item->visual, 'performance' => ['note' => $context['note'], 'examples' => array_slice($context['examples'], 0, 8)]], JSON_THROW_ON_ERROR), 'intake-'.$item->id);
+            $sources = ($item->visual['type'] ?? '') === 'collection' ? $item->visual['cards'] : null;
+            $maximum = min((int) ($rule->options['max_cards'] ?? 10), CardPlanner::limit($item->channel));
+            $generation = $this->generate($brand, $item->channel, $item->title, 'autopilot', json_encode(['approved_content' => $item->body, 'structured_visual' => $sources ? null : $item->visual, 'source_cards' => $sources, 'max_cards' => $maximum, 'performance' => ['note' => $context['note'], 'examples' => array_slice($context['examples'], 0, 8)]], JSON_THROW_ON_ERROR), 'intake-'.$item->id);
             $package = $this->package($generation);
+            $visual = $sources ? app(CardPlanner::class)->select($sources, $package, $item->channel, $maximum) : $item->visual;
             $headline = FetchSource::normalize($package['headline_quote'] ?? '');
             $excerpt = FetchSource::normalize($package['excerpt_quote'] ?? '');
             $source = FetchSource::normalize($item->body);
@@ -73,8 +77,10 @@ class RunAutomation
             } elseif (($item->visual['type'] ?? '') === 'chart') {
                 $body = $item->visual['heading']."\n".$item->visual['note']."\nExplore the chart and source details in the link.";
             }
-            $post = DB::transaction(function () use ($brand, $item, $body, $generation): Post {
-                $post = $brand->posts()->create(['title' => $item->title, 'channel' => $item->channel, 'body' => $body, 'source_url' => $item->source_url, 'visual' => $item->visual]);
+            $body = app(ContentVisual::class)->caption($body, $visual);
+            $post = DB::transaction(function () use ($brand, $item, $body, $generation, $visual, $sources, $package): Post {
+                $post = $brand->posts()->create(['title' => $item->title, 'channel' => $item->channel, 'body' => $body, 'source_url' => $item->source_url, 'visual' => $visual]);
+                $post->forceFill(['card_sources' => $sources, 'card_plan_note' => $sources ? $package['reason'] : null])->save();
                 $item->update(['post_id' => $post->id]);
                 $generation->post_id = $post->id;
                 $generation->save();
@@ -169,7 +175,7 @@ class RunAutomation
             if ($post->brand->pyp_only) {
                 app(ContentVisual::class)->assertPreviousYearQuestion($post->visual, $post->source_url);
             }
-            if ($rule->category === 'question' && ($rule->options['question_difficulty'] ?? 'any') === 'hard' && ($post->visual['difficulty'] ?? null) !== 'hard') {
+            if ($rule->category === 'question' && ($rule->options['question_difficulty'] ?? 'any') === 'hard' && ! app(ContentVisual::class)->isHardQuestion($post->visual)) {
                 throw new \RuntimeException('This rule requires a source-labelled hard question with structured options.');
             }
             if ($post->visual && ! $post->image_hash) {

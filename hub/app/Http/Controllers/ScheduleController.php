@@ -65,7 +65,14 @@ class ScheduleController extends Controller
     {
         abort_unless($post->brand->user_id === $request->user()->id && $post->image_path, 404);
 
-        return Storage::disk('local')->response($post->image_path, 'post.png', ['Content-Type' => 'image/png', 'Cache-Control' => 'private, no-store']);
+        $index = $request->query('card');
+        $path = $post->image_path;
+        if ($index !== null) {
+            abort_unless(ctype_digit((string) $index) && isset($post->card_images[(int) $index]), 404);
+            $path = $post->card_images[(int) $index]['path'];
+        }
+
+        return Storage::disk('local')->response($path, 'post.png', ['Content-Type' => 'image/png', 'Cache-Control' => 'private, no-store']);
     }
 
     public function createImage(Request $request, Post $post, PostImage $images): RedirectResponse

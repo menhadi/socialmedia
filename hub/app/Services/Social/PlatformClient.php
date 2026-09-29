@@ -108,6 +108,10 @@ class PlatformClient
 
     public function publish(SocialAccount $account, Publication $publication): ?string
     {
+        if (count($publication->card_images ?? []) > 1 && $account->provider !== 'facebook') {
+            return $this->multiImage($account, $publication);
+        }
+
         return match ($account->provider) {
             'facebook' => $this->facebook->publish($account, $publication),
             'instagram' => $this->instagram($account, $publication),
@@ -122,6 +126,93 @@ class PlatformClient
     private function message(Publication $publication): string
     {
         return $publication->message.($publication->link ? "\n\n".$publication->link : '');
+    }
+
+    private function multiImage(SocialAccount $account, Publication $publication): ?string
+    {
+        if (! in_array($account->provider, ['instagram', 'linkedin', 'x'], true)) {
+            throw new FacebookFailure('platform_media');
+        }
+        $assets = [];
+        $pending = [];
+        foreach ($publication->card_images as $index => $card) {
+            $bytes = Storage::disk('local')->get($card['path']);
+            if ($account->provider === 'instagram') {
+                $source = imagecreatefromstring($bytes);
+                if (! $source) {
+                    throw new FacebookFailure('platform_media');
+                }
+                ob_start();
+                imagejpeg($source, null, 90);
+                $jpeg = ob_get_clean();
+                imagedestroy($source);
+                $path = 'publishing/'.$publication->id.'-'.$index.'.jpg';
+                if (! Storage::disk('local')->put($path, $jpeg)) {
+                    throw new FacebookFailure('platform_media');
+                }
+                $cards = $publication->card_images;
+                $cards[$index]['asset_path'] = $path;
+                $publication->forceFill(['card_images' => $cards])->save();
+                $url = URL::temporarySignedRoute('publishing.asset', now()->addHours(2), ['publication' => $publication->id, 'card' => $index]);
+                if (parse_url($url, PHP_URL_SCHEME) !== 'https') {
+                    throw new FacebookFailure('platform_public_url');
+                }
+                $assets[] = $this->identifier($this->checked($this->request($account)->post($this->graph($account).'/'.$account->page_id.'/media', ['image_url' => $url, 'is_carousel_item' => true]))->json('id'));
+            } elseif ($account->provider === 'linkedin') {
+                $value = $this->checked($this->request($account)->post('https://api.linkedin.com/rest/images?action=initializeUpload', ['initializeUploadRequest' => ['owner' => $account->page_id]]))->json('value');
+                $assets[] = $this->identifier($value['image'] ?? null, '/^urn:li:image:[a-zA-Z0-9_-]+$/D');
+                $this->upload($account, $value['uploadUrl'] ?? '', $bytes, 'image/png', false);
+            } else {
+                $id = $this->identifier($this->checked($this->request($account)->post('https://api.x.com/2/media/upload/initialize', ['media_type' => 'image/png', 'total_bytes' => strlen($bytes), 'media_category' => 'tweet_image']))->json('data.id'));
+                $this->checked($this->request($account)->attach('media', $bytes, 'card.png')->post('https://api.x.com/2/media/upload/'.$id.'/append', ['segment_index' => 0]));
+                $data = $this->checked($this->request($account)->post('https://api.x.com/2/media/upload/'.$id.'/finalize'))->json('data', []);
+                $assets[] = $id;
+                if (isset($data['processing_info'])) {
+                    $pending[] = $id;
+                }
+            }
+        }
+        $publication->forceFill(['transfer' => ['stage' => 'waiting', 'asset' => $assets[0], 'assets' => $assets, 'pending' => $pending, 'multi' => true], 'next_check_at' => now()->addMinute()])->save();
+        if ($account->provider === 'x' && ! $pending) {
+            return $this->xPost($account, $publication, $assets);
+        }
+
+        return null;
+    }
+
+    private function resumeImages(SocialAccount $account, Publication $publication): ?string
+    {
+        $assets = $publication->transfer['assets'];
+        foreach ($assets as $asset) {
+            if ($account->provider === 'instagram') {
+                $state = $this->checked($this->request($account)->get($this->graph($account).'/'.$asset, ['fields' => 'status_code']))->json('status_code');
+                $ready = $state === 'FINISHED';
+            } elseif ($account->provider === 'linkedin') {
+                $state = $this->checked($this->request($account)->get('https://api.linkedin.com/rest/images/'.rawurlencode($asset)))->json('status');
+                $ready = $state === 'AVAILABLE';
+            } else {
+                if (! in_array($asset, $publication->transfer['pending'] ?? [], true)) {
+                    continue;
+                }
+                $state = $this->checked($this->request($account)->get('https://api.x.com/2/media/upload', ['command' => 'STATUS', 'media_id' => $asset]))->json('data.processing_info.state');
+                $ready = $state === 'succeeded';
+            }
+            if (in_array($state, ['ERROR', 'EXPIRED', 'PROCESSING_FAILED', 'FAILED', 'failed'], true)) {
+                throw new FacebookFailure('platform_media');
+            }
+            if (! $ready) {
+                $publication->forceFill(['next_check_at' => now()->addMinute()])->save();
+
+                return null;
+            }
+        }
+        if ($account->provider === 'instagram') {
+            $parent = $this->identifier($this->checked($this->request($account)->post($this->graph($account).'/'.$account->page_id.'/media', ['media_type' => 'CAROUSEL', 'children' => implode(',', $assets), 'caption' => $this->message($publication)]))->json('id'));
+
+            return $this->waiting($publication, $parent);
+        }
+
+        return $account->provider === 'linkedin' ? $this->linkedinPost($account, $publication, $assets) : $this->xPost($account, $publication, $assets);
     }
 
     private function waiting(Publication $publication, string $asset, int $delay = 60): ?string
@@ -223,12 +314,14 @@ class PlatformClient
         return $this->waiting($publication, $asset);
     }
 
-    private function linkedinPost(SocialAccount $account, Publication $publication, ?string $asset = null): string
+    private function linkedinPost(SocialAccount $account, Publication $publication, string|array|null $asset = null): string
     {
         $body = ['author' => $publication->page_id, 'commentary' => $this->message($publication), 'visibility' => 'PUBLIC',
             'distribution' => ['feedDistribution' => 'MAIN_FEED', 'targetEntities' => [], 'thirdPartyDistributionChannels' => []],
             'lifecycleState' => 'PUBLISHED', 'isReshareDisabledByAuthor' => false];
-        if ($asset) {
+        if (is_array($asset)) {
+            $body['content'] = ['multiImage' => ['images' => array_map(fn ($id) => ['id' => $id], $asset)]];
+        } elseif ($asset) {
             $body['content'] = ['media' => ['id' => $asset, 'title' => $publication->title_snapshot]];
         }
         $this->submitting($publication);
@@ -258,11 +351,11 @@ class PlatformClient
         return $this->xPost($account, $publication, $id);
     }
 
-    private function xPost(SocialAccount $account, Publication $publication, ?string $asset = null): string
+    private function xPost(SocialAccount $account, Publication $publication, string|array|null $asset = null): string
     {
         $body = ['text' => $this->message($publication)];
         if ($asset) {
-            $body['media'] = ['media_ids' => [$asset]];
+            $body['media'] = ['media_ids' => is_array($asset) ? $asset : [$asset]];
         }
         $this->submitting($publication);
 
@@ -335,6 +428,9 @@ class PlatformClient
 
     public function resume(SocialAccount $account, Publication $publication): ?string
     {
+        if ($publication->transfer['multi'] ?? false) {
+            return $this->resumeImages($account, $publication);
+        }
         $asset = $publication->transfer['asset'];
         if ($publication->provider === 'instagram') {
             $state = $this->checked($this->request($account)->get($this->graph($account).'/'.$asset, ['fields' => 'status_code']))->json('status_code');

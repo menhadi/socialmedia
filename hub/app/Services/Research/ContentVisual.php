@@ -7,10 +7,29 @@ use Illuminate\Validation\ValidationException;
 
 class ContentVisual
 {
+    public function isHardQuestion(?array $visual): bool
+    {
+        if (($visual['type'] ?? '') === 'collection') {
+            return ! empty($visual['cards']) && collect($visual['cards'])->every(fn ($card) => $this->isHardQuestion($card['visual'] ?? null));
+        }
+
+        return ($visual['type'] ?? '') === 'question' && ($visual['difficulty'] ?? '') === 'hard';
+    }
+
     public function validate(mixed $input, ?string $sourceUrl): ?array
     {
         if ($input === null || $input === [] || (is_array($input) && ($input['type'] ?? '') === 'none')) {
             return null;
+        }
+        if (is_array($input) && ($input['type'] ?? '') === 'collection') {
+            Validator::make($input, ['type' => 'required|in:collection', 'cards' => 'required|array|min:1|max:10', 'cards.*' => 'required|array:visual,source_url', 'cards.*.visual.type' => 'required|in:chart,question,facts', 'cards.*.source_url' => 'required|url:http,https|max:2048'])->validate();
+
+            return ['type' => 'collection', 'cards' => array_values(array_map(fn ($card) => ['visual' => $this->validate($card['visual'], $card['source_url']), 'source_url' => $card['source_url']], $input['cards']))];
+        }
+        if (is_array($input) && ($input['type'] ?? '') === 'facts') {
+            $data = Validator::make(['visual' => $input, 'source_url' => $sourceUrl], ['source_url' => 'required|url:http,https|max:2048', 'visual' => 'required|array:type,heading,rows,note', 'visual.type' => 'required|in:facts', 'visual.heading' => 'required|string|max:100', 'visual.rows' => 'required|array|min:1|max:6', 'visual.rows.*' => 'required|string|max:160', 'visual.note' => 'required|string|max:180'])->validate();
+
+            return $data['visual'];
         }
         $data = Validator::make(['visual' => $input], [
             'visual' => 'required|array:type,heading,question,options,answer,group,category,exam,year,topic,subtopic,difficulty,question_kind,paper_url,provenance_verified,chart_style,history,unit,labels,values,note',
@@ -91,6 +110,14 @@ class ContentVisual
 
     public function assertPreviousYearQuestion(?array $visual, ?string $sourceUrl): void
     {
+        if (($visual['type'] ?? '') === 'collection') {
+            $checked = $this->validate($visual, $sourceUrl);
+            foreach ($checked['cards'] as $card) {
+                $this->assertPreviousYearQuestion($card['visual'], $card['source_url']);
+            }
+
+            return;
+        }
         $valid = ($visual['type'] ?? '') === 'question'
             && ($visual['question_kind'] ?? '') === 'pyp'
             && ! empty($visual['exam']) && ! empty($visual['year'])
@@ -126,6 +153,13 @@ class ContentVisual
 
     public function caption(string $body, ?array $visual): string
     {
+        if (($visual['type'] ?? '') === 'collection') {
+            foreach ($visual['cards'] as $card) {
+                $body = $this->caption($body, $card['visual']);
+            }
+
+            return $body;
+        }
         if (($visual['type'] ?? '') !== 'question') {
             return $body;
         }
@@ -151,7 +185,17 @@ class ContentVisual
         $points = [];
         $panels = [];
         $backgrounds = [[0, 0, 1200, 96, '#102d49'], [0, 96, 1200, 103, '#14b8a6']];
-        if ($visual['type'] === 'question') {
+        if ($visual['type'] === 'facts') {
+            $layers[] = [56, 125, 1088, 110, 34, '#102d49', $visual['heading'], true];
+            foreach ($visual['rows'] as $i => $row) {
+                $y = 260 + $i * 105;
+                $panels[] = [56, $y, 1144, $y + 90];
+                $layers[] = [78, $y + 16, 1044, 65, 24, '#102d49', $row];
+            }
+            $bottom = 280 + count($visual['rows']) * 105;
+            $layers[] = [56, $bottom, 1088, 95, 20, '#52657b', $visual['note']];
+            $height = $bottom + 180;
+        } elseif ($visual['type'] === 'question') {
             $provenance = ! empty($visual['exam'])
                 ? (($visual['question_kind'] ?? '') === 'pyp' ? 'ASKED IN: ' : 'EXAM: ').$visual['exam'].(! empty($visual['year']) ? ' · '.$visual['year'] : '')
                 : 'PRACTICE QUESTION · Exam not supplied';

@@ -11,6 +11,19 @@ class PostImage
 {
     public function create(Post $post): array
     {
+        if (($post->visual['type'] ?? '') === 'collection') {
+            $visual = app(ContentVisual::class)->validate($post->visual, $post->source_url);
+            $images = [];
+            foreach ($visual['cards'] as $i => $card) {
+                $single = clone $post;
+                $single->visual = $card['visual'];
+                $single->source_url = $card['source_url'];
+                $image = $this->create($single);
+                $images[] = ['path' => $image['image_path'], 'hash' => $image['image_hash'], 'source_url' => $card['source_url']];
+            }
+
+            return ['image_path' => $images[0]['path'], 'image_hash' => $images[0]['hash'], 'card_images' => $images];
+        }
         $binary = config('research.convert');
         if (! is_string($binary) || ! is_file($binary)) {
             throw new RuntimeException('Image rendering is unavailable. Configure HUB_IMAGE_CONVERT with the ImageMagick executable with Pango support.');
@@ -80,7 +93,7 @@ class PostImage
                 throw new RuntimeException('Could not store the post image.');
             }
 
-            return ['image_path' => $path, 'image_hash' => $hash];
+            return ['image_path' => $path, 'image_hash' => $hash, 'card_images' => null];
         } finally {
             @unlink($file);
         }

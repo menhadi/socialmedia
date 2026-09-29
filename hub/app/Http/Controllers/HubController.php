@@ -112,21 +112,30 @@ class HubController extends Controller
             'body' => 'required|string|max:20000', 'source_url' => 'nullable|url:http,https|max:2048',
         ]);
         $visuals = app(ContentVisual::class);
-        $data['visual'] = $visuals->validate($r->input('visual'), $data['source_url'] ?? null);
+        $r->validate(['source_cards_json' => 'nullable|json|max:60000', 'cards_json' => 'nullable|json|max:60000']);
+        $sources = $r->filled('source_cards_json') ? $visuals->validate(['type' => 'collection', 'cards' => json_decode($r->input('source_cards_json'), true)], null)['cards'] : null;
+        $input = $r->input('visual');
+        if (($input['type'] ?? '') === 'collection') {
+            $input = ['type' => 'collection', 'cards' => json_decode($r->input('cards_json', '[]'), true)];
+        }
+        $data['visual'] = $visuals->validate($input, $data['source_url'] ?? null);
         $data['body'] = $visuals->caption($data['body'], $data['visual']);
-        $post = DB::transaction(function () use ($post, $data): Post {
+        $post = DB::transaction(function () use ($post, $data, $sources): Post {
             if ($post) {
                 $post = Post::whereKey($post->id)->lockForUpdate()->firstOrFail();
                 $post->assertEditable();
                 $post->schedules()->where('status', 'queued')->update(['status' => 'cancelled', 'reason' => 'Post edited; review and schedule the new version.']);
                 $post->image_path = null;
                 $post->image_hash = null;
+                $post->card_images = null;
                 $post->video_path = null;
                 $post->video_hash = null;
             } else {
                 $post = new Post;
             }
             $post->fill($data);
+            $post->card_sources = $sources;
+            $post->card_plan_note = null;
             $post->brand_id = $data['brand_id'];
             $post->status = 'draft';
             $post->reviewed_at = null;

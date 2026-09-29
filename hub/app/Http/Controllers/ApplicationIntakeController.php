@@ -56,6 +56,9 @@ class ApplicationIntakeController extends Controller
         if ($visual) {
             $data['visual'] = $visual;
         }
+        if ($r->has('source_cards')) {
+            $data['visual'] = app(ContentVisual::class)->validate(['type' => 'collection', 'cards' => $r->input('source_cards')], $data['source_url'] ?? null);
+        }
         $fingerprint = hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
 
         return DB::transaction(function () use ($brand, $data, $fingerprint, $approved): ContentItem {

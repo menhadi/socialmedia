@@ -5,6 +5,7 @@ use App\Http\Controllers\AnalyticsController;
 use App\Http\Controllers\ApplicationIntakeController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\AutomationController;
+use App\Http\Controllers\CardPlanController;
 use App\Http\Controllers\FacebookWebhookController;
 use App\Http\Controllers\HubController;
 use App\Http\Controllers\MediaController;
@@ -24,6 +25,7 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 });
 Route::middleware('auth')->group(function () {
+    Route::post('/posts/{post}/plan-cards', CardPlanController::class)->middleware('throttle:5,1')->name('posts.cards.plan');
     Route::get('/publications/{publication}/delete', [PublicationDeletionController::class, 'preview'])->name('publications.delete.preview');
     Route::post('/publications/{publication}/delete', [PublicationDeletionController::class, 'destroy'])->middleware('throttle:5,1')->name('publications.delete');
     Route::post('/publications/{publication}/external-removal', [PublicationDeletionController::class, 'external'])->middleware('throttle:5,1')->name('publications.external-removal');

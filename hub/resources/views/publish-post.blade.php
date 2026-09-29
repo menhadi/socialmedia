@@ -7,7 +7,10 @@
         <h2>Saved message</h2>
         <div class="post-body">{{ $post->body }}</div>
         @if($post->video_path)<video controls preload="metadata" src="{{ route('posts.video',$post) }}" style="width:100%"></video><p>The video will be uploaded with the saved message as its description. The platform may need time to process it.</p>@endif
-        @if($post->image_path)<img src="{{ route('posts.image',$post) }}" alt="Image included in this post" style="width:100%;height:auto;border-radius:12px"><p class="muted small">This image will be attached. A shared link is included in the photo caption.</p>@endif
+        @if($post->card_images)
+            @foreach($post->card_images as $i=>$card)<p>Card {{ $i+1 }} of {{ count($post->card_images) }}</p><img src="{{ route('posts.image',['post'=>$post,'card'=>$i]) }}" alt="Card {{ $i+1 }} included in this post" style="width:100%;height:auto;border-radius:12px">@endforeach
+            <p>All cards are sent together, in this order, with one caption. Platform layouts may vary.</p>
+        @elseif($post->image_path)<img src="{{ route('posts.image',$post) }}" alt="Image included in this post" style="width:100%;height:auto;border-radius:12px"><p class="muted small">This image will be attached. A shared link is included in the photo caption.</p>@endif
         <p class="muted small">{{ $post->channel==='youtube' ? 'The saved title becomes the video title.' : 'The message and attached media are sent.' }} The platform controls how the published post is displayed.</p>
     </section>
     <section class="panel form-panel">

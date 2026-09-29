@@ -31,6 +31,9 @@ class GenerateMedia
                 return $existing;
             }
             $post->assertEditable();
+            if (($post->visual['type'] ?? '') === 'collection') {
+                throw ValidationException::withMessages(['media' => 'Render the source cards from the post editor. AI artwork cannot replace a source-card collection.']);
+            }
             if (! hash_equals($post->publishingFingerprint(), $data['fingerprint'])) {
                 throw ValidationException::withMessages(['media' => 'The post changed. Reload before generating.']);
             }
@@ -136,6 +139,9 @@ class GenerateMedia
             $post = Post::whereKey($job->post_id)->lockForUpdate()->firstOrFail();
             $post->assertEditable();
             $job->refresh();
+            if (($post->visual['type'] ?? '') === 'collection') {
+                throw ValidationException::withMessages(['media' => 'Generate the source-based card set for this post. AI artwork cannot replace its cards.']);
+            }
             if ($job->status === 'attached') {
                 return;
             }

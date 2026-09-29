@@ -91,6 +91,7 @@ class PublishPost
                 'message' => $post->body, 'link' => ($data['include_link'] ?? false) ? $post->source_url : null,
                 'status' => 'publishing',
                 'image_path' => $post->image_path,
+                'card_images' => $post->card_images,
                 'video_path' => $post->video_path,
             ])->save();
             if ($activeSchedule?->automation_rule_id && $publication->link && parse_url($publication->link, PHP_URL_HOST) === parse_url($post->brand->website ?? '', PHP_URL_HOST)) {

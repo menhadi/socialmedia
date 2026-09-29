@@ -64,7 +64,20 @@ class FacebookClient
             $payload['link'] = $publication->link;
         }
         try {
-            if ($publication->video_path) {
+            if (count($publication->card_images ?? []) > 1) {
+                $attached = [];
+                foreach ($publication->card_images as $card) {
+                    $upload = $this->request($account)->attach('source', Storage::disk('local')->get($card['path']), 'card.png')->post($publication->page_id.'/photos', ['published' => 'false']);
+                    $this->check($upload);
+                    $id = $upload->json('id');
+                    if (! is_string($id) || ! preg_match('/^[0-9]+$/D', $id)) {
+                        throw new FacebookFailure('response');
+                    }
+                    $attached[] = ['media_fbid' => $id];
+                }
+                $publication->forceFill(['transfer' => ['stage' => 'submitting', 'photos' => $attached]])->save();
+                $response = $this->request($account)->post($publication->page_id.'/feed', ['message' => $publication->message.($publication->link ? "\n\n".$publication->link : ''), 'attached_media' => $attached, 'published' => true]);
+            } elseif ($publication->video_path) {
                 $description = $publication->message;
                 if ($publication->link && ! str_contains($description, $publication->link)) {
                     $description .= "\n\n".$publication->link;
@@ -93,7 +106,7 @@ class FacebookClient
 
             return $id;
         }
-        $id = $response->json($publication->image_path ? 'post_id' : 'id');
+        $id = $response->json($publication->image_path && count($publication->card_images ?? []) <= 1 ? 'post_id' : 'id');
         if (! is_string($id) || ! preg_match('/^'.preg_quote($publication->page_id, '/').'_[0-9]+$/D', $id) || strlen($id) > 255) {
             throw new FacebookFailure('response', true);
         }
