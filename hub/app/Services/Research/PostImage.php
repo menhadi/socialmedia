@@ -48,7 +48,8 @@ class PostImage
                         continue;
                     }
                     $weight = ($layer[7] ?? false) ? 'Bold ' : '';
-                    array_push($command, '(', '-background', 'none', '-gravity', 'west', '-define', 'pango:align=left', '-define', 'pango:auto-dir=false', '-size', $width.'x', 'pango:<span font_desc="Sans '.$weight.$font.'" foreground="'.$color.'">'.$escape($text).'</span>', '-resize', $width.'x'.$height.'>', '+repage', ')', '-gravity', 'northwest', '-geometry', '+'.$x.'+'.$y, '-composite');
+                    // Pango gravity controls writing direction; west can reverse horizontal alignment.
+                    array_push($command, '(', '-background', 'none', '-gravity', 'south', '-direction', 'left-to-right', '-define', 'pango:align=left', '-size', $width.'x', 'pango:<span font_desc="Sans '.$weight.$font.'" foreground="'.$color.'">'.$escape($text).'</span>', '-resize', $width.'x'.$height.'>', '+repage', ')', '-gravity', 'northwest', '-geometry', '+'.$x.'+'.$y, '-composite');
                 }
                 array_push($command, 'png:'.$file);
             }
