@@ -7,6 +7,17 @@ use Illuminate\Validation\ValidationException;
 
 class ContentVisual
 {
+    private function chartNumber(float $value): string
+    {
+        foreach ([1000000000000 => 'T', 1000000000 => 'B', 1000000 => 'M', 1000 => 'k'] as $divisor => $suffix) {
+            if ($value >= $divisor) {
+                return rtrim(rtrim(number_format($value / $divisor, 1, '.', ''), '0'), '.').$suffix;
+            }
+        }
+
+        return rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.');
+    }
+
     public function isHardQuestion(?array $visual): bool
     {
         if (($visual['type'] ?? '') === 'collection') {
@@ -224,7 +235,7 @@ class ContentVisual
             for ($tick = 0; $tick <= 4; $tick++) {
                 $y = 620 - $tick * 85;
                 $backgrounds[] = [130, $y, 1080, $y + 1, '#dbe5ee'];
-                $layers[] = [20, $y - 12, 100, 32, 16, '#52657b', (string) round($max * $tick / 4, 2)];
+                $layers[] = [20, $y - 12, 100, 32, 16, '#52657b', $this->chartNumber($max * $tick / 4)];
             }
             $previous = null;
             $labelledPoints = [];
@@ -269,7 +280,7 @@ class ContentVisual
                 }
             }
             foreach ($selected as [$x, $y, $value]) {
-                $layers[] = [$x - 55, $y - 38, 140, 30, 17, '#087f8c', rtrim(rtrim(number_format($value, 2, '.', ','), '0'), '.').($visual['unit'] === '%' ? '%' : ''), true];
+                $layers[] = [min(1004, max(130, $x - 55)), $y - 38, 140, 30, 17, '#087f8c', $this->chartNumber($value).($visual['unit'] === '%' ? '%' : ''), true];
             }
             $layers[] = [56, 702, 1088, 44, 19, '#087f8c', 'Year · '.$firstYear.'–'.$lastYear.' · '.count($points).' recorded values · Unit: '.$visual['unit']];
             if ($missingMarkers) {

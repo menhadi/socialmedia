@@ -219,6 +219,15 @@ class ContentVisualTest extends TestCase
         $this->assertContains('EXAM: GATE', array_column($service->layout($question, 'School', 'https://example.com/q')['layers'], 6));
     }
 
+    public function test_large_line_values_use_readable_abbreviations_without_changing_points(): void
+    {
+        $visual = ['type' => 'chart', 'chart_style' => 'line', 'heading' => 'Margins', 'labels' => ['2019', '2024'], 'values' => [173330.61, 139474.25], 'unit' => 'votes', 'note' => 'Source data'];
+        $layout = (new ContentVisual)->layout($visual, 'Brand', 'https://example.com/data');
+        $this->assertContains('139.5k', array_column($layout['layers'], 6));
+        $this->assertContains('173.3k', array_column($layout['layers'], 6));
+        $this->assertSame([[130, 280], [1080, 346]], $layout['points']);
+    }
+
     public function test_long_question_and_six_bar_chart_keep_all_content_inside_canvas(): void
     {
         $service = new ContentVisual;
