@@ -68,6 +68,7 @@ class ContentPrompt
         }
 
         if (in_array($data['task'], ['card_plan', 'autopilot'], true)) {
+            $system .= ' A chart with series contains multiple named datasets on one shared unit and year axis. Prefer supplied comparison charts over redundant individual series cards when relevant. Do not split or merge their source data. Voter registration versus votes cast uses counts; turnout rate uses percent and must not be compared on the same numeric axis as counts.';
             $system .= ' Multi-card editorial goal: prioritize distinct substantive datasets and findings relevant to the topic, such as complementary historical metrics or factual lists. Do not use a coverage-only explanation card as a substitute for another requested graph. Keep caveats on the relevant cards and caption; select a separate notes card only if essential for understanding and not redundant. When only one substantive dataset exists, choose one useful card rather than padding the set. Never invent additional datasets to increase the card count.';
         }
 

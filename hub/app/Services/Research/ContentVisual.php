@@ -42,6 +42,28 @@ class ContentVisual
 
             return $data['visual'];
         }
+        if (is_array($input) && ($input['type'] ?? '') === 'chart' && array_key_exists('series', $input)) {
+            Validator::make($input, [
+                'type' => 'required|in:chart', 'chart_style' => 'required|in:line',
+                'values' => 'prohibited', 'history' => 'prohibited',
+                'labels' => 'required|array|min:2|max:200',
+                'series' => 'required|array|min:2|max:4', 'series.*' => 'required|array:name,values',
+                'series.*.name' => 'required|string|max:35|distinct', 'series.*.values' => 'required|array',
+            ])->validate();
+            $base = $input;
+            unset($base['series']);
+            $series = [];
+            foreach ($input['series'] as $item) {
+                if (count($item['values']) !== count($input['labels'] ?? [])) {
+                    throw ValidationException::withMessages(['visual.series' => 'Every series must have one value or null per year.']);
+                }
+                $checked = $this->validate($base + ['values' => $item['values']], $sourceUrl);
+                $series[] = ['name' => $item['name'], 'values' => $checked['values']];
+            }
+            unset($checked['values']);
+
+            return $checked + ['series' => $series];
+        }
         $data = Validator::make(['visual' => $input], [
             'visual' => 'required|array:type,heading,question,options,answer,group,category,exam,year,topic,subtopic,difficulty,question_kind,paper_url,provenance_verified,chart_style,history,unit,labels,values,note',
             'visual.type' => 'required|in:question,chart',
@@ -189,6 +211,9 @@ class ContentVisual
     /** Pixel positions and literal text; never include the answer on a question card. */
     public function layout(array $visual, string $brand, string $sourceUrl): array
     {
+        if (! empty($visual['series'])) {
+            return $this->comparisonLayout($visual, $brand, $sourceUrl);
+        }
         $layers = [[56, 28, 1088, 44, 24, '#ffffff', $brand, true]];
         $bars = [];
         $lines = [];
@@ -318,5 +343,69 @@ class ContentVisual
         $layers[] = [56, $height - 47, 1088, 35, 18, '#ffffff', 'Source: '.parse_url($sourceUrl, PHP_URL_HOST)];
 
         return ['width' => 1200, 'height' => $height, 'layers' => $layers, 'bars' => $bars, 'lines' => $lines, 'missing_markers' => $missingMarkers, 'points' => $points, 'panels' => $panels, 'backgrounds' => $backgrounds];
+    }
+
+    private function comparisonLayout(array $visual, string $brand, string $sourceUrl): array
+    {
+        $colors = ['#e87924', '#2563eb', '#059669', '#9333ea'];
+        $backgrounds = [[0, 0, 1200, 210, '#102d49'], [0, 210, 1200, 218, '#22c6b8'], [36, 390, 1164, 896, '#ffffff']];
+        $layers = [[52, 28, 1096, 40, 22, '#7de0d6', mb_substr($brand, 0, 55), true], [52, 83, 1096, 110, 37, '#ffffff', $visual['heading'], true]];
+        $lines = $points = $missing = $panels = [];
+        $first = (int) min($visual['labels']);
+        $last = (int) max($visual['labels']);
+        $allValues = array_merge(...array_column($visual['series'], 'values'));
+        $max = $visual['unit'] === '%' ? 100 : max(1, ...array_filter($allValues, fn ($v) => $v !== null));
+        if ($visual['unit'] !== '%') {
+            $magnitude = 10 ** floor(log10($max));
+            $max = ceil($max / $magnitude) * $magnitude;
+        }
+        foreach ($visual['series'] as $index => $series) {
+            $color = $colors[$index];
+            $x = 52 + $index * (int) (1096 / count($visual['series']));
+            $width = (int) (1096 / count($visual['series'])) - 16;
+            $panels[] = [$x, 244, $x + $width, 367];
+            $backgrounds[] = [$x, 244, $x + 5, 367, $color];
+            $latest = array_key_last(array_filter($series['values'], fn ($v) => $v !== null));
+            $suffix = $visual['unit'] === '%' ? '%' : '';
+            $layers[] = [$x + 18, 256, $width - 32, 35, 19, $color, $series['name'], true];
+            $layers[] = [$x + 18, 300, $width - 32, 48, 27, '#102d49', $this->chartNumber($series['values'][$latest]).$suffix.' · '.$visual['labels'][$latest], true];
+        }
+        $layers[] = [52, 400, 1096, 32, 17, '#52657b', 'HISTORICAL COMPARISON  /  '.$first.'–'.$last.'  /  '.$visual['unit']];
+        for ($tick = 0; $tick <= 4; $tick++) {
+            $y = 810 - $tick * 85;
+            $backgrounds[] = [150, $y, 1080, $y + 1, '#e4ebf2'];
+            $layers[] = [52, $y - 12, 92, 30, 16, '#52657b', $this->chartNumber($max * $tick / 4)];
+        }
+        $lastLabelX = -100;
+        foreach ($visual['labels'] as $index => $year) {
+            $x = 150 + (int) round(930 * ((int) $year - $first) / max(1, $last - $first));
+            if ($index === count($visual['labels']) - 1 || ($x - $lastLabelX >= 90 && 1080 - $x >= 90)) {
+                $layers[] = [$x - 25, 850, 75, 30, 16, '#52657b', (string) $year];
+                $lastLabelX = $x;
+            }
+        }
+        foreach ($visual['series'] as $index => $series) {
+            $previous = null;
+            foreach ($series['values'] as $i => $value) {
+                $x = 150 + (int) round(930 * ((int) $visual['labels'][$i] - $first) / max(1, $last - $first));
+                if ($value === null) {
+                    $missing[] = [$x, 826 + $index * 5, $colors[$index]];
+
+                    continue;
+                }
+                $y = 810 - (int) round(340 * $value / $max);
+                $points[] = [$x, $y, $colors[$index]];
+                if ($previous !== null) {
+                    $lines[] = [$previous[0], $previous[1], $x, $y, $colors[$index]];
+                }
+                $previous = [$x, $y];
+            }
+        }
+        $layers[] = [52, 925, 1096, 42, 17, '#52657b', $missing ? '× = unavailable in that series. Lines bridge gaps; missing values are not estimated.' : 'Shared scale starts at zero. Values shown above are the latest recorded observations.'];
+        $layers[] = [52, 980, 1096, 104, 19, '#52657b', $visual['note']];
+        $backgrounds[] = [0, 1116, 1200, 1180, '#102d49'];
+        $layers[] = [52, 1134, 1096, 32, 18, '#ffffff', 'EXPLORE THE DATA  →  '.parse_url($sourceUrl, PHP_URL_HOST)];
+
+        return ['width' => 1200, 'height' => 1180, 'layers' => $layers, 'bars' => [], 'lines' => $lines, 'missing_markers' => $missing, 'points' => $points, 'panels' => $panels, 'backgrounds' => $backgrounds];
     }
 }

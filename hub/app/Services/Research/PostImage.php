@@ -56,13 +56,15 @@ class PostImage
                     array_push($command, '-fill', $index % 2 ? '#0891b2' : '#14b8a6', '-draw', 'rectangle '.implode(',', $bar));
                 }
                 foreach ($layout['lines'] as $line) {
-                    array_push($command, '-stroke', '#0891b2', '-strokewidth', '4', '-draw', 'line '.implode(',', $line));
+                    array_push($command, '-stroke', $line[4] ?? '#0891b2', '-strokewidth', '4', '-draw', 'line '.implode(',', array_slice($line, 0, 4)));
                 }
-                foreach ($layout['missing_markers'] as [$x, $y]) {
-                    array_push($command, '-stroke', '#b45309', '-strokewidth', '3', '-draw', 'line '.($x - 5).','.($y - 5).','.($x + 5).','.($y + 5), '-draw', 'line '.($x - 5).','.($y + 5).','.($x + 5).','.($y - 5));
+                foreach ($layout['missing_markers'] as $marker) {
+                    [$x, $y] = $marker;
+                    array_push($command, '-stroke', $marker[2] ?? '#b45309', '-strokewidth', '3', '-draw', 'line '.($x - 5).','.($y - 5).','.($x + 5).','.($y + 5), '-draw', 'line '.($x - 5).','.($y + 5).','.($x + 5).','.($y - 5));
                 }
-                foreach ($layout['points'] as [$x, $y]) {
-                    array_push($command, '-stroke', '#ffffff', '-strokewidth', '2', '-fill', '#087f8c', '-draw', 'circle '.$x.','.$y.','.($x + 5).','.$y);
+                foreach ($layout['points'] as $point) {
+                    [$x, $y] = $point;
+                    array_push($command, '-stroke', '#ffffff', '-strokewidth', '2', '-fill', $point[2] ?? '#087f8c', '-draw', 'circle '.$x.','.$y.','.($x + 5).','.$y);
                 }
                 array_push($command, '-stroke', 'none');
                 foreach ($layout['layers'] as $layer) {

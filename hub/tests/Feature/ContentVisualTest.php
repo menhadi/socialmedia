@@ -8,6 +8,7 @@ use App\Models\Post;
 use App\Models\User;
 use App\Services\Research\ContentVisual;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class ContentVisualTest extends TestCase
@@ -17,6 +18,43 @@ class ContentVisualTest extends TestCase
     private function question(): array
     {
         return ['type' => 'question', 'question' => 'Which option solves the equation?', 'options' => ['First option', 'Second option'], 'answer' => 2, 'group' => 'GATE', 'exam' => 'GATE', 'year' => 2024, 'topic' => 'Linear Algebra', 'difficulty' => 'hard'];
+    }
+
+    public function test_comparison_series_preserve_year_alignment_nulls_and_colors(): void
+    {
+        $input = ['type' => 'chart', 'chart_style' => 'line', 'heading' => 'Party comparison', 'unit' => '%', 'labels' => ['2024', '2014', '2019'], 'series' => [['name' => 'BJP', 'values' => [46.09, 43.01, null]], ['name' => 'INC', 'values' => [45.39, 40.81, null]]], 'note' => 'Available tables; missing values are not zero.'];
+        $service = new ContentVisual;
+        $checked = $service->validate($input, 'https://example.com/history');
+        $this->assertSame(['2014', '2019', '2024'], $checked['labels']);
+        $this->assertSame([43.01, null, 46.09], $checked['series'][0]['values']);
+        $layout = $service->layout($checked, 'Pollmedia', 'https://example.com/history');
+        $this->assertCount(2, array_unique(array_column($layout['lines'], 4)));
+        $this->assertCount(2, $layout['missing_markers']);
+        $this->assertContains('BJP', array_column($layout['layers'], 6));
+        $this->assertContains('INC', array_column($layout['layers'], 6));
+        foreach ($layout['layers'] as [$x, $y, $width, $height]) {
+            $this->assertLessThanOrEqual(1200, $x + $width);
+            $this->assertLessThanOrEqual(1180, $y + $height);
+        }
+        $token = str_repeat('c', 64);
+        Brand::factory()->create(['intake_token_hash' => hash('sha256', $token)]);
+        $this->withToken($token)->postJson('/api/v1/content', ['external_id' => 'comparison-1', 'category' => 'general', 'channel' => 'facebook', 'title' => 'Comparison', 'body' => 'A source-grounded comparison of party shares.', 'source_url' => 'https://example.com/history', 'source_cards' => [['visual' => $input, 'source_url' => 'https://example.com/history']]])->assertCreated();
+        $this->assertSame($checked, ContentItem::firstOrFail()->visual['cards'][0]['visual']);
+    }
+
+    public function test_comparison_rejects_misaligned_or_invalid_series(): void
+    {
+        $base = ['type' => 'chart', 'chart_style' => 'line', 'heading' => 'Comparison', 'unit' => '%', 'labels' => ['2019', '2024'], 'series' => [['name' => 'A', 'values' => [20, 30]], ['name' => 'B', 'values' => [40, 50]]], 'note' => 'Source'];
+        foreach ([[40], [null, null], [40, 101]] as $badValues) {
+            $input = $base;
+            $input['series'][1]['values'] = $badValues;
+            try {
+                (new ContentVisual)->validate($input, 'https://example.com/data');
+                $this->fail('Invalid comparison was accepted.');
+            } catch (ValidationException $exception) {
+                $this->assertNotEmpty($exception->errors());
+            }
+        }
     }
 
     public function test_application_owner_can_enable_pyp_policy_without_affecting_other_brands(): void
