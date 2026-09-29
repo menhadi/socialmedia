@@ -87,10 +87,49 @@ class ContentVisualTest extends TestCase
         $first = $service->layout($question, 'School', 'https://example.com/q');
         $question['answer'] = 1;
         $this->assertSame($first, $service->layout($question, 'School', 'https://example.com/q'));
-        $this->assertContains('A.  First option', array_column($first['layers'], 6));
-        $this->assertContains('B.  Second option', array_column($first['layers'], 6));
+        $this->assertContains('First option', array_column($first['layers'], 6));
+        $this->assertContains('Second option', array_column($first['layers'], 6));
+        $this->assertContains('EXAM: GATE · 2024', array_column($first['layers'], 6));
         $chart = $service->layout(['type' => 'chart', 'heading' => 'Comparison', 'labels' => ['A', 'B'], 'values' => [0, 50], 'unit' => '%', 'note' => 'Sample'], 'Brand', 'https://example.com/data');
-        $this->assertSame([[310, 395, 635, 440]], $chart['bars']);
+        $this->assertSame([[310, 415, 635, 470]], $chart['bars']);
         $this->assertContains('50 %', array_column($chart['layers'], 6));
+    }
+
+    public function test_question_options_use_two_columns_and_provenance_is_not_invented(): void
+    {
+        $service = new ContentVisual;
+        $question = $this->question();
+        $question['options'] = ['First', 'Second', 'Third', 'Fourth'];
+        unset($question['exam'], $question['year']);
+        $layout = $service->layout($question, 'School', 'https://example.com/q');
+        $this->assertLessThan(900, $layout['height']);
+        $this->assertSame($layout['panels'][0][1], $layout['panels'][1][1]);
+        $this->assertSame($layout['panels'][2][1], $layout['panels'][3][1]);
+        $this->assertGreaterThan($layout['panels'][0][2], $layout['panels'][1][0]);
+        $this->assertContains('PRACTICE QUESTION · Exam not supplied', array_column($layout['layers'], 6));
+        $question['exam'] = 'GATE';
+        $this->assertContains('EXAM: GATE', array_column($service->layout($question, 'School', 'https://example.com/q')['layers'], 6));
+    }
+
+    public function test_long_question_and_six_bar_chart_keep_all_content_inside_canvas(): void
+    {
+        $service = new ContentVisual;
+        $question = array_replace($this->question(), ['question' => str_repeat('Question ', 72), 'options' => array_fill(0, 6, str_repeat('Option ', 21))]);
+        $chart = ['type' => 'chart', 'heading' => 'Comparison', 'labels' => ['A', 'B', 'C', 'D', 'E', 'F'], 'values' => [0, 20, 40, 60, 80, 100], 'unit' => '%', 'note' => str_repeat('Source note ', 15)];
+        foreach ([$question, $chart] as $visual) {
+            $layout = $service->layout($visual, 'Brand', 'https://example.com/data');
+            foreach ($layout['layers'] as [$x, $y, $width, $height]) {
+                $this->assertGreaterThanOrEqual(0, $x);
+                $this->assertGreaterThanOrEqual(0, $y);
+                $this->assertLessThanOrEqual($layout['width'], $x + $width);
+                $this->assertLessThanOrEqual($layout['height'], $y + $height);
+            }
+            foreach (array_merge($layout['panels'], $layout['bars']) as [$left, $top, $right, $bottom]) {
+                $this->assertGreaterThanOrEqual(0, $left);
+                $this->assertGreaterThanOrEqual(0, $top);
+                $this->assertLessThanOrEqual($layout['width'], $right);
+                $this->assertLessThan($layout['height'] - 65, $bottom);
+            }
+        }
     }
 }

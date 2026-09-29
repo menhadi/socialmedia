@@ -31,19 +31,24 @@ class PostImage
                 $visuals = new ContentVisual;
                 $visual = $visuals->validate($post->visual, $post->source_url);
                 $layout = $visuals->layout($visual, $post->brand->name, $post->source_url);
-                $command = [$binary, '-limit', 'memory', '64MiB', '-limit', 'map', '128MiB', '-size', '1200x1200', 'xc:#f7fafc'];
+                $command = [$binary, '-limit', 'memory', '64MiB', '-limit', 'map', '128MiB', '-size', '1200x'.$layout['height'], 'xc:#f7fafc', '-stroke', 'none'];
+                foreach ($layout['backgrounds'] as [$x1, $y1, $x2, $y2, $fill]) {
+                    array_push($command, '-fill', $fill, '-draw', 'rectangle '.$x1.','.$y1.','.$x2.','.$y2);
+                }
                 foreach ($layout['panels'] as $panel) {
                     array_push($command, '-fill', '#ffffff', '-stroke', '#d7e2e9', '-strokewidth', '2', '-draw', 'roundrectangle '.implode(',', $panel).',12,12');
                 }
                 array_push($command, '-stroke', 'none');
-                foreach ($layout['bars'] as $bar) {
-                    array_push($command, '-fill', '#157f79', '-draw', 'rectangle '.implode(',', $bar));
+                foreach ($layout['bars'] as $index => $bar) {
+                    array_push($command, '-fill', $index % 2 ? '#0891b2' : '#14b8a6', '-draw', 'rectangle '.implode(',', $bar));
                 }
-                foreach ($layout['layers'] as [$x, $y, $width, $height, $font, $color, $text]) {
+                foreach ($layout['layers'] as $layer) {
+                    [$x, $y, $width, $height, $font, $color, $text] = $layer;
                     if ($text === '') {
                         continue;
                     }
-                    array_push($command, '(', '-background', 'none', '-size', $width.'x', 'pango:<span font_desc="Sans '.$font.'" foreground="'.$color.'">'.$escape($text).'</span>', '-resize', $width.'x'.$height.'>', '+repage', ')', '-gravity', 'northwest', '-geometry', '+'.$x.'+'.$y, '-composite');
+                    $weight = ($layer[7] ?? false) ? 'Bold ' : '';
+                    array_push($command, '(', '-background', 'none', '-gravity', 'west', '-define', 'pango:align=left', '-define', 'pango:auto-dir=false', '-size', $width.'x', 'pango:<span font_desc="Sans '.$weight.$font.'" foreground="'.$color.'">'.$escape($text).'</span>', '-resize', $width.'x'.$height.'>', '+repage', ')', '-gravity', 'northwest', '-geometry', '+'.$x.'+'.$y, '-composite');
                 }
                 array_push($command, 'png:'.$file);
             }
@@ -52,7 +57,7 @@ class PostImage
             $process->mustRun();
             $bytes = file_get_contents($file);
             $size = getimagesizefromstring($bytes);
-            if (! $size || $size[0] !== 1200 || $size[1] !== ($post->visual ? 1200 : 900) || strlen($bytes) > 4000000) {
+            if (! $size || $size[0] !== 1200 || $size[1] !== ($post->visual ? $layout['height'] : 900) || strlen($bytes) > 4000000) {
                 throw new RuntimeException('Image rendering failed.');
             }
             $hash = hash('sha256', $bytes);

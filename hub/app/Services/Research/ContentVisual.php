@@ -93,35 +93,60 @@ class ContentVisual
     /** Pixel positions and literal text; never include the answer on a question card. */
     public function layout(array $visual, string $brand, string $sourceUrl): array
     {
-        $layers = [[60, 45, 1080, 50, 24, '#157f79', $brand]];
+        $layers = [[56, 28, 1088, 44, 24, '#ffffff', $brand, true]];
         $bars = [];
         $panels = [];
+        $backgrounds = [[0, 0, 1200, 96, '#102d49'], [0, 96, 1200, 103, '#14b8a6']];
         if ($visual['type'] === 'question') {
-            $context = array_filter([$visual['exam'] ?? null, $visual['year'] ?? null, $visual['topic'] ?? null]);
-            $layers[] = [60, 105, 1080, 65, 22, '#536477', implode(' · ', $context)];
-            $layers[] = [60, 190, 1080, 300, 32, '#142a40', $visual['question']];
+            $provenance = ! empty($visual['exam'])
+                ? 'EXAM: '.$visual['exam'].(! empty($visual['year']) ? ' · '.$visual['year'] : '')
+                : 'PRACTICE QUESTION · Exam not supplied';
+            $layers[] = [56, 126, 1088, 55, 23, '#087f8c', $provenance, true];
+            $context = array_unique(array_filter([$visual['group'] ?? null, $visual['category'] ?? null, $visual['topic'] ?? null, $visual['subtopic'] ?? null]));
+            $layers[] = [56, 188, 1088, 52, 20, '#52657b', implode(' · ', $context)];
+            $questionHeight = min(300, max(130, (int) ceil(mb_strlen($visual['question']) / 65) * 48));
+            $layers[] = [56, 260, 1088, $questionHeight, 32, '#102d49', $visual['question'], true];
+            $optionsTop = 260 + $questionHeight + 24;
+            $optionHeight = max(array_map('mb_strlen', $visual['options'])) > 75 ? 150 : 106;
             foreach ($visual['options'] as $i => $option) {
-                $panels[] = [60, 500 + $i * 82, 1140, 578 + $i * 82];
-                $layers[] = [85, 510 + $i * 82, 1030, 72, 25, '#142a40', chr(65 + $i).'.  '.$option];
+                $x = 56 + ($i % 2) * 556;
+                $y = $optionsTop + intdiv($i, 2) * ($optionHeight + 18);
+                $panels[] = [$x, $y, $x + 532, $y + $optionHeight];
+                $layers[] = [$x + 20, $y + 22, 42, 46, 26, '#087f8c', chr(65 + $i).'.', true];
+                $layers[] = [$x + 76, $y + 22, 430, $optionHeight - 35, 25, '#102d49', $option];
             }
-            $layers[] = [60, 1020, 1080, 45, 23, '#157f79', 'Choose your answer · Open the linked question to practise'];
+            $footer = $optionsTop + (int) ceil(count($visual['options']) / 2) * ($optionHeight + 18) + 12;
+            $layers[] = [56, $footer, 1088, 42, 22, '#087f8c', 'Choose your answer · Explore the linked learning resource', true];
+            $height = $footer + 130;
         } else {
-            $layers[] = [60, 115, 1080, 140, 35, '#142a40', $visual['heading']];
+            $layers[] = [56, 125, 1088, 110, 34, '#102d49', $visual['heading'], true];
             $max = $visual['unit'] === '%' ? 100 : max(1, ...$visual['values']);
+            $count = count($visual['labels']);
+            $rowHeight = $count <= 3 ? 125 : 90;
+            $bottom = 285 + $count * $rowHeight;
+            for ($tick = 0; $tick <= 4; $tick++) {
+                $x = 310 + (int) round(650 * $tick / 4);
+                $backgrounds[] = [$x, 270, $x + 1, $bottom - 20, '#dbe5ee'];
+                $layers[] = [$x - 12, $bottom, 150, 40, 17, '#52657b', (string) round($max * $tick / 4, 2)];
+            }
             foreach ($visual['labels'] as $i => $label) {
-                $y = 290 + $i * 105;
+                $y = 290 + $i * $rowHeight;
                 $value = (float) $visual['values'][$i];
-                $layers[] = [60, $y, 230, 70, 24, '#142a40', $label];
+                $layers[] = [56, $y + 6, 230, 65, 24, '#102d49', $label, true];
+                $backgrounds[] = [310, $y, 960, $y + 55, '#e9f0f6'];
                 $width = (int) round(650 * $value / $max);
                 if ($width > 0) {
-                    $bars[] = [310, $y, 310 + $width, $y + 45];
+                    $bars[] = [310, $y, 310 + $width, $y + 55];
                 }
-                $layers[] = [975, $y, 180, 75, 21, '#142a40', (string) $visual['values'][$i].' '.$visual['unit']];
+                $layers[] = [982, $y + 6, 162, 65, 24, '#087f8c', (string) $visual['values'][$i].' '.$visual['unit'], true];
             }
-            $layers[] = [60, 950, 1080, 110, 21, '#536477', 'Zero baseline · '.$visual['note']];
+            $layers[] = [56, $bottom + 58, 1088, 36, 19, '#087f8c', 'Scale starts at zero · Unit: '.$visual['unit']];
+            $layers[] = [56, $bottom + 105, 1088, 90, 20, '#52657b', $visual['note']];
+            $height = $bottom + 280;
         }
-        $layers[] = [60, 1110, 1080, 50, 19, '#536477', 'Source: '.parse_url($sourceUrl, PHP_URL_HOST)];
+        $backgrounds[] = [0, $height - 65, 1200, $height, '#102d49'];
+        $layers[] = [56, $height - 47, 1088, 35, 18, '#ffffff', 'Source: '.parse_url($sourceUrl, PHP_URL_HOST)];
 
-        return ['layers' => $layers, 'bars' => $bars, 'panels' => $panels];
+        return ['width' => 1200, 'height' => $height, 'layers' => $layers, 'bars' => $bars, 'panels' => $panels, 'backgrounds' => $backgrounds];
     }
 }
