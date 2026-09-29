@@ -34,6 +34,7 @@ class ChannelRules
 
     public static function validate(Post $post, bool $link, array $options, ?\DateTimeInterface $when = null): void
     {
+        $post->assertContentPolicy();
         $fail = fn (string $message) => throw ValidationException::withMessages(['post' => $message]);
         if (! self::supported($post->channel)) {
             $fail('Choose a supported publishing channel.');

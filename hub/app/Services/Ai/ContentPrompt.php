@@ -54,6 +54,10 @@ class ContentPrompt
             $system .= ' When structured_visual is supplied, check it against approved_content: question wording, every option, answer (1-based index), exam metadata, chart labels, values, units and coverage. Flag contradictions or missing evidence. Do not infer exam year, difficulty, group or topic. The visual is rendered from supplied values, not generated artwork. Prefer useful educational content over brand promotion.';
         }
 
+        if ($brand->pyp_only) {
+            $system .= ' This application permits only genuine previous-year paper questions. Require supplied source-paper evidence, exam name and year; do not invent practice questions or infer provenance. Preserve the exact question and options. Clearly name the exam and year. If provenance is missing, flag it or explain that no eligible question was supplied.';
+        }
+
         return ['system' => $system, 'user' => $user];
     }
 }

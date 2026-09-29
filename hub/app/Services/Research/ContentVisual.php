@@ -13,7 +13,7 @@ class ContentVisual
             return null;
         }
         $data = Validator::make(['visual' => $input], [
-            'visual' => 'required|array:type,heading,question,options,answer,group,category,exam,year,topic,subtopic,difficulty,unit,labels,values,note',
+            'visual' => 'required|array:type,heading,question,options,answer,group,category,exam,year,topic,subtopic,difficulty,question_kind,paper_url,provenance_verified,chart_style,history,unit,labels,values,note',
             'visual.type' => 'required|in:question,chart',
         ])->validate()['visual'];
         $rules = ['source_url' => 'required|url:http,https|max:2048'];
@@ -23,6 +23,7 @@ class ContentVisual
         $rules['visual.year'] = 'nullable|integer|between:1900,2100';
         $rules['visual.difficulty'] = 'nullable|in:easy,medium,hard';
         if ($data['type'] === 'question') {
+            $rules += ['visual.question_kind' => 'nullable|in:practice,pyp', 'visual.paper_url' => 'nullable|url:http,https|max:2048', 'visual.provenance_verified' => 'nullable|boolean'];
             if (! is_array($data['options'] ?? null)) {
                 throw ValidationException::withMessages(['visual.options' => 'Supply between two and six answer options.']);
             }
@@ -36,8 +37,21 @@ class ContentVisual
             }
             $data['options'] = array_values(array_filter($data['options'] ?? [], fn ($value) => $value !== null && $value !== ''));
             $rules += ['visual.question' => 'required|string|max:650', 'visual.options' => 'required|array|min:2|max:6', 'visual.options.*' => 'required|string|max:150|distinct', 'visual.answer' => 'required|integer|min:1|max:'.count($data['options'])];
-            $keys = ['type', 'question', 'options', 'answer', 'group', 'category', 'exam', 'year', 'topic', 'subtopic', 'difficulty'];
+            $keys = ['type', 'question', 'options', 'answer', 'group', 'category', 'exam', 'year', 'topic', 'subtopic', 'difficulty', 'question_kind', 'paper_url', 'provenance_verified'];
         } else {
+            $line = ($data['chart_style'] ?? 'bar') === 'line';
+            if ($line && ! empty($data['history'])) {
+                Validator::make($data, ['history' => 'string|max:12000'])->validate();
+                $data['labels'] = $data['values'] = [];
+                foreach (preg_split('/\R/u', trim($data['history'])) as $row) {
+                    $pair = array_map('trim', explode(',', $row));
+                    if (count($pair) !== 2) {
+                        throw ValidationException::withMessages(['visual.history' => 'Enter one year,value pair per line. Use a blank value for missing data.']);
+                    }
+                    $data['labels'][] = $pair[0];
+                    $data['values'][] = $pair[1] === '' ? null : $pair[1];
+                }
+            }
             $labels = $data['labels'] ?? [];
             $values = $data['values'] ?? [];
             if (! is_array($labels) || ! is_array($values)) {
@@ -51,15 +65,46 @@ class ContentVisual
             }
             $data['labels'] = array_column($pairs, 0);
             $data['values'] = array_column($pairs, 1);
-            $rules += ['visual.heading' => 'required|string|max:100', 'visual.unit' => 'required|string|max:20', 'visual.note' => 'required|string|max:180', 'visual.labels' => 'required|array|min:2|max:6', 'visual.labels.*' => 'required|string|max:35|distinct', 'visual.values' => 'required|array|min:2|max:6', 'visual.values.*' => 'required|numeric|min:0|max:1000000000000'];
-            $keys = ['type', 'heading', 'unit', 'note', 'labels', 'values'];
+            $limit = $line ? 200 : 6;
+            $rules += ['visual.chart_style' => 'nullable|in:bar,line', 'visual.heading' => 'required|string|max:100', 'visual.unit' => 'required|string|max:20', 'visual.note' => 'required|string|max:180', 'visual.labels' => 'required|array|min:2|max:'.$limit, 'visual.labels.*' => $line ? 'required|integer|between:1800,2200|distinct' : 'required|string|max:35|distinct', 'visual.values' => 'required|array|min:2|max:'.$limit, 'visual.values.*' => ($line ? 'nullable' : 'required').'|numeric|min:0|max:1000000000000'];
+            $keys = ['type', 'heading', 'unit', 'note', 'labels', 'values', 'chart_style'];
         }
         Validator::make(['visual' => $data, 'source_url' => $sourceUrl], $rules)->validate();
+        if (($data['question_kind'] ?? '') === 'pyp' && $data['type'] === 'question') {
+            $this->assertPreviousYearQuestion($data, $sourceUrl);
+        }
+        if ($data['type'] === 'chart' && ($data['chart_style'] ?? '') === 'line') {
+            if (count(array_filter($data['values'], fn ($value) => $value !== null && $value !== '')) < 2) {
+                throw ValidationException::withMessages(['visual.values' => 'Supply at least two recorded values; missing values are not zero.']);
+            }
+            $pairs = array_map(null, $data['labels'], $data['values']);
+            usort($pairs, fn ($a, $b) => (int) $a[0] <=> (int) $b[0]);
+            $data['labels'] = array_map(fn ($pair) => (string) (int) $pair[0], $pairs);
+            $data['values'] = array_map(fn ($pair) => $pair[1] === null || $pair[1] === '' ? null : (float) $pair[1], $pairs);
+        }
         if ($data['type'] === 'chart' && $data['unit'] === '%' && max($data['values']) > 100) {
             throw ValidationException::withMessages(['visual.values' => 'Percentage values must be between 0 and 100.']);
         }
 
         return array_intersect_key($data, array_flip($keys));
+    }
+
+    public function assertPreviousYearQuestion(?array $visual, ?string $sourceUrl): void
+    {
+        $valid = ($visual['type'] ?? '') === 'question'
+            && ($visual['question_kind'] ?? '') === 'pyp'
+            && ! empty($visual['exam']) && ! empty($visual['year'])
+            && in_array($visual['provenance_verified'] ?? false, [true, 1, '1'], true)
+            && filter_var($visual['paper_url'] ?? '', FILTER_VALIDATE_URL)
+            && filter_var($sourceUrl ?? '', FILTER_VALIDATE_URL);
+        if (! $valid) {
+            throw ValidationException::withMessages(['visual' => 'Previous-year questions only: supply the exact question and options, exam name, exam year, source paper URL, and confirmation that the source was checked. Original or AI-invented practice questions cannot be published.']);
+        }
+        Validator::make(['visual' => $visual, 'source_url' => $sourceUrl], [
+            'visual.question' => 'required|string', 'visual.options' => 'required|array|min:2|max:6',
+            'visual.exam' => 'required|string|max:45', 'visual.year' => 'required|integer|between:1900,'.now()->year,
+            'visual.paper_url' => 'required|url:http,https|max:2048', 'source_url' => 'required|url:http,https|max:2048',
+        ])->validate();
     }
 
     public function hashtags(array $visual): string
@@ -84,6 +129,12 @@ class ContentVisual
         if (($visual['type'] ?? '') !== 'question') {
             return $body;
         }
+        if (($visual['question_kind'] ?? '') === 'pyp' && ! empty($visual['exam']) && ! empty($visual['year'])) {
+            $provenance = 'Asked in '.$visual['exam'].' · '.$visual['year'];
+            if (! str_contains($body, $provenance)) {
+                $body = $provenance."\n\n".$body;
+            }
+        }
         $tags = $this->hashtags($visual);
         $missing = array_filter(explode(' ', $tags), fn ($tag) => $tag !== '' && ! in_array($tag, preg_split('/\s+/u', $body), true));
 
@@ -95,11 +146,13 @@ class ContentVisual
     {
         $layers = [[56, 28, 1088, 44, 24, '#ffffff', $brand, true]];
         $bars = [];
+        $lines = [];
+        $points = [];
         $panels = [];
         $backgrounds = [[0, 0, 1200, 96, '#102d49'], [0, 96, 1200, 103, '#14b8a6']];
         if ($visual['type'] === 'question') {
             $provenance = ! empty($visual['exam'])
-                ? 'EXAM: '.$visual['exam'].(! empty($visual['year']) ? ' · '.$visual['year'] : '')
+                ? (($visual['question_kind'] ?? '') === 'pyp' ? 'ASKED IN: ' : 'EXAM: ').$visual['exam'].(! empty($visual['year']) ? ' · '.$visual['year'] : '')
                 : 'PRACTICE QUESTION · Exam not supplied';
             $layers[] = [56, 126, 1088, 55, 23, '#087f8c', $provenance, true];
             $context = array_unique(array_filter([$visual['group'] ?? null, $visual['category'] ?? null, $visual['topic'] ?? null, $visual['subtopic'] ?? null]));
@@ -118,6 +171,44 @@ class ContentVisual
             $footer = $optionsTop + (int) ceil(count($visual['options']) / 2) * ($optionHeight + 18) + 12;
             $layers[] = [56, $footer, 1088, 42, 22, '#087f8c', 'Choose your answer · Explore the linked learning resource', true];
             $height = $footer + 130;
+        } elseif (($visual['chart_style'] ?? '') === 'line') {
+            $layers[] = [56, 125, 1088, 110, 34, '#102d49', $visual['heading'], true];
+            $max = $visual['unit'] === '%' ? 100 : max(1, ...array_filter($visual['values'], fn ($v) => $v !== null));
+            $firstYear = (int) min($visual['labels']);
+            $lastYear = (int) max($visual['labels']);
+            for ($tick = 0; $tick <= 4; $tick++) {
+                $y = 620 - $tick * 85;
+                $backgrounds[] = [130, $y, 1080, $y + 1, '#dbe5ee'];
+                $layers[] = [20, $y - 12, 100, 32, 16, '#52657b', (string) round($max * $tick / 4, 2)];
+            }
+            $previous = null;
+            $lastLabelX = -100;
+            $count = count($visual['labels']);
+            foreach ($visual['labels'] as $i => $year) {
+                $x = 130 + (int) round(950 * ((int) $year - $firstYear) / max(1, $lastYear - $firstYear));
+                if ($i === $count - 1 || ($x - $lastLabelX >= 80 && ($i === 0 || 1080 - $x >= 80))) {
+                    $layers[] = [$x - 25, 644, 70, 34, 17, '#52657b', (string) $year];
+                    $lastLabelX = $x;
+                }
+                $value = $visual['values'][$i];
+                if ($value === null) {
+                    $previous = null;
+
+                    continue;
+                }
+                $y = 620 - (int) round(340 * $value / $max);
+                $points[] = [$x, $y];
+                if ($previous !== null) {
+                    $lines[] = [$previous[0], $previous[1], $x, $y];
+                }
+                if ($count <= 10) {
+                    $layers[] = [$x - 25, $y - 34, 90, 28, 16, '#087f8c', (string) $value];
+                }
+                $previous = [$x, $y];
+            }
+            $layers[] = [56, 702, 1088, 44, 19, '#087f8c', 'Year · '.$firstYear.'–'.$lastYear.' · '.count($points).' recorded values · Unit: '.$visual['unit']];
+            $layers[] = [56, 754, 1088, 95, 20, '#52657b', $visual['note']];
+            $height = 940;
         } else {
             $layers[] = [56, 125, 1088, 110, 34, '#102d49', $visual['heading'], true];
             $max = $visual['unit'] === '%' ? 100 : max(1, ...$visual['values']);
@@ -147,6 +238,6 @@ class ContentVisual
         $backgrounds[] = [0, $height - 65, 1200, $height, '#102d49'];
         $layers[] = [56, $height - 47, 1088, 35, 18, '#ffffff', 'Source: '.parse_url($sourceUrl, PHP_URL_HOST)];
 
-        return ['width' => 1200, 'height' => $height, 'layers' => $layers, 'bars' => $bars, 'panels' => $panels, 'backgrounds' => $backgrounds];
+        return ['width' => 1200, 'height' => $height, 'layers' => $layers, 'bars' => $bars, 'lines' => $lines, 'points' => $points, 'panels' => $panels, 'backgrounds' => $backgrounds];
     }
 }

@@ -172,6 +172,13 @@ class PublishPost
                 }
             }
             $account = $publication->account;
+            try {
+                $publication->post->assertContentPolicy();
+            } catch (ValidationException) {
+                $this->finish($publication, ['status' => 'failed', 'error_code' => 'platform_approval']);
+
+                return;
+            }
             if (! $account || ! $account->verified_at || ! $account->access_token || $account->credential_version !== $publication->credential_version) {
                 $this->finish($publication, ['status' => 'failed', 'error_code' => 'platform_changed']);
 

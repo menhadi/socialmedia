@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Research\ContentVisual;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Validation\ValidationException;
@@ -55,6 +56,16 @@ class Post extends Model
         }
         if (! in_array($this->status, ['draft', 'reviewed'], true) || $this->publications()->whereIn('status', ['publishing', 'published', 'uncertain'])->exists()) {
             throw ValidationException::withMessages(['post' => 'This post has been submitted to the platform and cannot be edited or submitted again. Check its publishing history below.']);
+        }
+    }
+
+    public function assertContentPolicy(): void
+    {
+        if ($this->brand()->value('pyp_only')) {
+            app(ContentVisual::class)->assertPreviousYearQuestion($this->visual, $this->source_url);
+            if (! $this->image_hash) {
+                throw ValidationException::withMessages(['visual' => 'Create the previous-year question card with its exam and year before publishing.']);
+            }
         }
     }
 }

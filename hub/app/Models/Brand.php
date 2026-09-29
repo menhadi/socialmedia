@@ -12,7 +12,12 @@ class Brand extends Model
 
     protected $hidden = ['intake_token_hash'];
 
-    protected $fillable = ['name', 'website', 'description', 'audience', 'tone', 'language', 'instructions', 'ai_connection_id', 'image_connection_id', 'video_connection_id'];
+    protected $fillable = ['name', 'website', 'description', 'audience', 'tone', 'language', 'instructions', 'ai_connection_id', 'image_connection_id', 'video_connection_id', 'pyp_only'];
+
+    protected function casts(): array
+    {
+        return ['pyp_only' => 'boolean'];
+    }
 
     public function posts()
     {

@@ -45,6 +45,20 @@ class GrowthWorkflowTest extends TestCase
         Http::fake(['https://api.deepseek.com/*' => Http::response(['choices' => [['message' => ['content' => json_encode($overrides + ['headline_quote' => 'Study a little every day', 'excerpt_quote' => 'Study a little every day and review your notes.', 'hashtags' => ['#Study'], 'concerns' => []])], 'finish_reason' => 'stop']], 'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 100]])]);
     }
 
+    public function test_pyp_policy_holds_unverified_intake_before_spending_ai_budget(): void
+    {
+        $rule = $this->setupRule(['category' => 'question']);
+        Brand::whereKey($rule->brand_id)->update(['pyp_only' => true]);
+        Http::preventStrayRequests();
+        $item = ContentItem::factory()->create(['brand_id' => $rule->brand_id, 'category' => 'question', 'approved' => true]);
+        app(RunAutomation::class)->run($item);
+        $this->assertSame('held', $item->fresh()->status);
+        $this->assertStringContainsString('Previous-year questions only', $item->fresh()->reason);
+        $this->assertDatabaseCount('ai_generations', 0);
+        $this->assertDatabaseCount('post_schedules', 0);
+        Http::assertNothingSent();
+    }
+
     public function test_structured_question_creates_card_with_short_caption_and_supplied_hashtags(): void
     {
         $rule = $this->setupRule(['category' => 'question', 'with_image' => false, 'options' => ['workflow' => 'review', 'media_kind' => 'image']]);

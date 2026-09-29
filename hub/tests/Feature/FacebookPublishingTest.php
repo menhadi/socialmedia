@@ -60,6 +60,16 @@ class FacebookPublishingTest extends TestCase
         ]);
     }
 
+    public function test_enabling_pyp_only_blocks_an_already_reviewed_practice_post(): void
+    {
+        $account = $this->account();
+        $post = $this->reviewed($account);
+        $account->brand->update(['pyp_only' => true]);
+        $this->post('/posts/'.$post->id.'/publish', $this->payload($post, $account))->assertSessionHasErrors('visual');
+        $this->assertDatabaseCount('publications', 0);
+        Http::assertNothingSent();
+    }
+
     public function test_social_and_publishing_actions_require_login(): void
     {
         $this->get('/social-accounts')->assertRedirect('/login');

@@ -42,6 +42,13 @@ class PostImage
                 foreach ($layout['bars'] as $index => $bar) {
                     array_push($command, '-fill', $index % 2 ? '#0891b2' : '#14b8a6', '-draw', 'rectangle '.implode(',', $bar));
                 }
+                foreach ($layout['lines'] as $line) {
+                    array_push($command, '-stroke', '#0891b2', '-strokewidth', '4', '-draw', 'line '.implode(',', $line));
+                }
+                foreach ($layout['points'] as [$x, $y]) {
+                    array_push($command, '-stroke', '#ffffff', '-strokewidth', '2', '-fill', '#087f8c', '-draw', 'circle '.$x.','.$y.','.($x + 5).','.$y);
+                }
+                array_push($command, '-stroke', 'none');
                 foreach ($layout['layers'] as $layer) {
                     [$x, $y, $width, $height, $font, $color, $text] = $layer;
                     if ($text === '') {

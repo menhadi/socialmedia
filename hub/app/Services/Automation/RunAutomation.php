@@ -54,6 +54,9 @@ class RunAutomation
         }
         try {
             $brand = Brand::findOrFail($item->brand_id);
+            if ($brand->pyp_only) {
+                app(ContentVisual::class)->assertPreviousYearQuestion($item->visual, $item->source_url);
+            }
             $context = $rule->learn ? $this->performance->build($brand, $item->channel) : ['note' => 'Performance learning disabled.', 'examples' => []];
             $generation = $this->generate($brand, $item->channel, $item->title, 'autopilot', json_encode(['approved_content' => $item->body, 'structured_visual' => $item->visual, 'performance' => ['note' => $context['note'], 'examples' => array_slice($context['examples'], 0, 8)]], JSON_THROW_ON_ERROR), 'intake-'.$item->id);
             $package = $this->package($generation);
@@ -110,6 +113,9 @@ class RunAutomation
                 throw new \RuntimeException('Enable a matching automation rule first.');
             }
             $fingerprint = $post->publishingFingerprint();
+            if ($post->brand->pyp_only) {
+                app(ContentVisual::class)->assertPreviousYearQuestion($post->visual, $post->source_url);
+            }
             $generation = $this->generate($post->brand, $post->channel, $post->title, 'assess', json_encode(['admin_confirmed_draft' => $post->body, 'structured_visual' => $post->visual, 'reference_url' => $post->source_url], JSON_THROW_ON_ERROR), 'assess-'.$post->id.'-'.$fingerprint.'-'.$rule->version);
             $package = $this->package($generation);
             if ($package['concerns']) {
@@ -160,6 +166,9 @@ class RunAutomation
                 throw new \RuntimeException('Automation rule does not match this application and platform.');
             }
             $kind = $rule->options['media_kind'] ?? 'none';
+            if ($post->brand->pyp_only) {
+                app(ContentVisual::class)->assertPreviousYearQuestion($post->visual, $post->source_url);
+            }
             if ($rule->category === 'question' && ($rule->options['question_difficulty'] ?? 'any') === 'hard' && ($post->visual['difficulty'] ?? null) !== 'hard') {
                 throw new \RuntimeException('This rule requires a source-labelled hard question with structured options.');
             }
