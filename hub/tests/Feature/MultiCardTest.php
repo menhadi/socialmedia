@@ -82,7 +82,7 @@ class MultiCardTest extends TestCase
         $planner = new CardPlanner;
         $selected = $planner->select($this->sources(), $this->plan(), 'facebook');
         $this->assertEquals([$this->sources()[1], $this->sources()[0]], $selected['cards']);
-        foreach ([['card_indices' => [1, 1]], ['card_indices' => [3]], ['card_indices' => []], ['concerns' => ['Contradiction']]] as $change) {
+        foreach ([['card_indices' => [1, 1]], ['card_indices' => [3]], ['card_indices' => []], ['concerns' => ['Contradiction']], ['concerns' => 'Coverage differs between years']] as $change) {
             try {
                 $planner->select($this->sources(), $this->plan($change), 'facebook');
                 $this->fail('Invalid plan accepted');

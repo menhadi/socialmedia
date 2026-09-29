@@ -31,6 +31,9 @@ class CardPlanner
 
     public function select(array $sources, array $plan, string $channel, int $maximum = 10): array
     {
+        if (is_string($plan['concerns'] ?? null) && trim($plan['concerns']) !== '') {
+            throw ValidationException::withMessages(['cards' => 'AI flagged the source material; manual review is required. '.mb_substr($plan['concerns'], 0, 1500)]);
+        }
         $sources = app(ContentVisual::class)->validate(['type' => 'collection', 'cards' => $sources], null)['cards'];
         $limit = min(self::limit($channel), $maximum);
         Validator::make($plan, ['card_indices' => 'required|array|min:1|max:'.$limit, 'card_indices.*' => 'required|integer|min:1|max:'.count($sources).'|distinct', 'concerns' => 'present|array', 'reason' => 'required|string|max:1500'])->validate();
