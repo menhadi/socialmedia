@@ -130,6 +130,21 @@ class MultiCardTest extends TestCase
         $this->assertSame('reviewed', $post->fresh()->status);
     }
 
+    public function test_disclosed_caveats_allow_card_planning_without_erasing_source_notes(): void
+    {
+        [$account, $post] = $this->setupPost();
+        $sources = $post->card_sources;
+        $sources[0]['visual'] = ['type' => 'chart', 'chart_style' => 'line', 'heading' => 'Recorded turnout', 'unit' => '%', 'labels' => ['2004', '2009', '2014'], 'values' => [60, null, 65], 'note' => '2009 unavailable. Coverage varies; these are not comparable statewide totals.'];
+        $post->forceFill(['card_sources' => $sources])->save();
+        $this->fakeAi($this->plan(['caveats' => ['Missing year and varying coverage are disclosed.']]));
+        $this->post(route('posts.cards.plan', $post), ['request_key' => (string) Str::uuid(), 'fingerprint' => $post->publishingFingerprint()])->assertSessionHasNoErrors();
+        $post->refresh();
+        $this->assertNull($post->visual['cards'][1]['visual']['values'][1]);
+        $this->assertSame($sources[0]['visual']['note'], $post->visual['cards'][1]['visual']['note']);
+        $this->assertSame('draft', $post->status);
+        Http::assertSent(fn ($request) => str_contains($request['messages'][0]['content'], 'caveats alone do not require manual review') && str_contains($request['messages'][0]['content'], 'Still block invented or filled-in values'));
+    }
+
     public function test_difficult_question_rule_checks_the_whole_collection(): void
     {
         $visuals = new ContentVisual;
