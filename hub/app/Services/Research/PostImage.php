@@ -32,39 +32,49 @@ class PostImage
         $brand = $escape(mb_substr($post->brand->name, 0, 55));
         $title = $escape(mb_substr($post->title, 0, 200));
         $host = $escape(parse_url($post->source_url ?? '', PHP_URL_HOST) ?: '');
-        $markup = '<span font_desc="Sans 24" foreground="#86efac">'.$brand.'</span>'
-            ."\n\n".'<span font_desc="Sans Bold 42" foreground="#ffffff">'.$title.'</span>'
-            ."\n\n".'<span font_desc="Sans 18" foreground="#cbd5e1">'.$host.'</span>';
+        $markup = '<span font_desc="Sans 48" foreground="#86efac">'.$brand.'</span>'
+            ."\n\n".'<span font_desc="Sans Bold 84" foreground="#ffffff">'.$title.'</span>'
+            ."\n\n".'<span font_desc="Sans 36" foreground="#cbd5e1">'.$host.'</span>';
         $file = tempnam(sys_get_temp_dir(), 'hub-card-');
         try {
             $command = [$binary, '-limit', 'memory', '64MiB', '-limit', 'map', '128MiB',
-                '-background', '#102f35', '-size', '1040x', 'pango:'.$markup,
-                '-resize', '1040x740>', '-gravity', 'center', '-extent', '1200x900', 'png:'.$file];
+                '-background', '#102f35', '-size', '2080x', 'pango:'.$markup,
+                '-resize', '2080x1480>', '-gravity', 'center', '-extent', '2400x1800', 'png:'.$file];
             if ($post->visual) {
                 $visuals = new ContentVisual;
                 $visual = $visuals->validate($post->visual, $post->source_url);
                 $layout = $visuals->layout($visual, $post->brand->name, $post->source_url);
-                $command = [$binary, '-limit', 'memory', '64MiB', '-limit', 'map', '128MiB', '-size', '1200x'.$layout['height'], 'xc:#f7fafc', '-stroke', 'none'];
+                // Rasterize geometry and glyphs at twice the design resolution, before final downsampling.
+                $layout['height'] *= 2;
+                foreach (['backgrounds' => 4, 'panels' => 4, 'bars' => 4, 'lines' => 4, 'missing_markers' => 2, 'points' => 2, 'layers' => 5] as $key => $coordinates) {
+                    foreach ($layout[$key] as &$item) {
+                        for ($i = 0; $i < $coordinates; $i++) {
+                            $item[$i] *= 2;
+                        }
+                    }
+                    unset($item);
+                }
+                $command = [$binary, '-limit', 'memory', '64MiB', '-limit', 'map', '128MiB', '-size', '2400x'.$layout['height'], 'xc:#f7fafc', '-stroke', 'none'];
                 foreach ($layout['backgrounds'] as [$x1, $y1, $x2, $y2, $fill]) {
                     array_push($command, '-fill', $fill, '-draw', 'rectangle '.$x1.','.$y1.','.$x2.','.$y2);
                 }
                 foreach ($layout['panels'] as $panel) {
-                    array_push($command, '-fill', '#ffffff', '-stroke', '#d7e2e9', '-strokewidth', '2', '-draw', 'roundrectangle '.implode(',', $panel).',12,12');
+                    array_push($command, '-fill', '#ffffff', '-stroke', '#d7e2e9', '-strokewidth', '4', '-draw', 'roundrectangle '.implode(',', $panel).',24,24');
                 }
                 array_push($command, '-stroke', 'none');
                 foreach ($layout['bars'] as $index => $bar) {
                     array_push($command, '-fill', $index % 2 ? '#0891b2' : '#14b8a6', '-draw', 'rectangle '.implode(',', $bar));
                 }
                 foreach ($layout['lines'] as $line) {
-                    array_push($command, '-stroke', $line[4] ?? '#0891b2', '-strokewidth', '4', '-draw', 'line '.implode(',', array_slice($line, 0, 4)));
+                    array_push($command, '-stroke', $line[4] ?? '#0891b2', '-strokewidth', '8', '-draw', 'line '.implode(',', array_slice($line, 0, 4)));
                 }
                 foreach ($layout['missing_markers'] as $marker) {
                     [$x, $y] = $marker;
-                    array_push($command, '-stroke', $marker[2] ?? '#b45309', '-strokewidth', '3', '-draw', 'line '.($x - 5).','.($y - 5).','.($x + 5).','.($y + 5), '-draw', 'line '.($x - 5).','.($y + 5).','.($x + 5).','.($y - 5));
+                    array_push($command, '-stroke', $marker[2] ?? '#b45309', '-strokewidth', '6', '-draw', 'line '.($x - 10).','.($y - 10).','.($x + 10).','.($y + 10), '-draw', 'line '.($x - 10).','.($y + 10).','.($x + 10).','.($y - 10));
                 }
                 foreach ($layout['points'] as $point) {
                     [$x, $y] = $point;
-                    array_push($command, '-stroke', '#ffffff', '-strokewidth', '2', '-fill', $point[2] ?? '#087f8c', '-draw', 'circle '.$x.','.$y.','.($x + 5).','.$y);
+                    array_push($command, '-stroke', '#ffffff', '-strokewidth', '4', '-fill', $point[2] ?? '#087f8c', '-draw', 'circle '.$x.','.$y.','.($x + 10).','.$y);
                 }
                 array_push($command, '-stroke', 'none');
                 foreach ($layout['layers'] as $layer) {
@@ -80,13 +90,13 @@ class PostImage
             }
             // Contain the entire artwork inside a padded square; never crop source content.
             array_pop($command);
-            array_push($command, '-resize', '1104x1104>', '-background', '#f7fafc', '-gravity', 'center', '-extent', '1200x1200', 'png:'.$file);
+            array_push($command, '-filter', 'Lanczos', '-resize', '1884x1884>', '-background', '#f7fafc', '-gravity', 'center', '-extent', '2048x2048', '-colorspace', 'sRGB', '-depth', '8', 'png:'.$file);
             $process = new Process($command);
-            $process->setTimeout(20);
+            $process->setTimeout(40);
             $process->mustRun();
             $bytes = file_get_contents($file);
             $size = getimagesizefromstring($bytes);
-            if (! $size || $size[0] !== 1200 || $size[1] !== 1200 || strlen($bytes) > 4000000) {
+            if (! $size || $size[0] !== 2048 || $size[1] !== 2048 || strlen($bytes) > 4000000) {
                 throw new RuntimeException('Image rendering failed.');
             }
             $hash = hash('sha256', $bytes);
