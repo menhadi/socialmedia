@@ -76,6 +76,8 @@ class ContentVisualTest extends TestCase
         $layout = $service->layout($visual, 'Brand', 'https://example.com/data');
         $this->assertCount(7, $layout['points']);
         $this->assertCount(5, $layout['lines']);
+        $this->assertSame([[$layout['points'][4][0], $layout['points'][4][1], $layout['points'][5][0], $layout['points'][5][1]]], $layout['dotted_lines']);
+        $this->assertContains('Dotted bridge = missing data between observations; no values estimated.', array_column($layout['layers'], 6));
         $this->assertSame(130, $layout['points'][0][0]);
         $this->assertSame(1080, $layout['points'][6][0]);
         $this->assertSame(382, $layout['points'][6][1]);
@@ -98,6 +100,31 @@ class ContentVisualTest extends TestCase
         $this->assertCount(125, $post->visual['values']);
         $this->assertCount(125, (new ContentVisual)->layout($post->visual, 'Brand', $post->source_url)['points']);
         $this->get('/posts/'.$post->id.'/edit')->assertOk()->assertSee('1900,50')->assertSee('2024,50');
+    }
+
+    public function test_dense_history_labels_some_actual_values_and_bridges_only_internal_gaps(): void
+    {
+        $service = new ContentVisual;
+        $values = array_fill(0, 20, 50);
+        $values[0] = $values[8] = $values[9] = $values[19] = null;
+        $layout = $service->layout(['type' => 'chart', 'chart_style' => 'line', 'heading' => 'History', 'unit' => '%', 'labels' => range(2000, 2019), 'values' => $values, 'note' => 'Source data.'], 'Brand', 'https://example.com');
+        $this->assertCount(16, $layout['points']);
+        $this->assertCount(14, $layout['lines']);
+        $this->assertCount(1, $layout['dotted_lines']);
+        $labels = array_values(array_filter($layout['layers'], fn ($layer) => $layer[6] === '50%'));
+        $this->assertGreaterThan(2, count($labels));
+        $this->assertLessThan(16, count($labels));
+        foreach ($labels as $i => $label) {
+            foreach (array_slice($labels, $i + 1) as $other) {
+                $this->assertGreaterThanOrEqual(145, abs($label[0] - $other[0]));
+            }
+        }
+        foreach ($layout['layers'] as [$x, $y, $width, $height]) {
+            $this->assertGreaterThanOrEqual(0, $x);
+            $this->assertGreaterThanOrEqual(0, $y);
+            $this->assertLessThanOrEqual($layout['width'], $x + $width);
+            $this->assertLessThanOrEqual($layout['height'], $y + $height);
+        }
     }
 
     public function test_question_saves_metadata_and_requires_image_before_review(): void

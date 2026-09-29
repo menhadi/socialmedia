@@ -147,6 +147,7 @@ class ContentVisual
         $layers = [[56, 28, 1088, 44, 24, '#ffffff', $brand, true]];
         $bars = [];
         $lines = [];
+        $dottedLines = [];
         $points = [];
         $panels = [];
         $backgrounds = [[0, 0, 1200, 96, '#102d49'], [0, 96, 1200, 103, '#14b8a6']];
@@ -182,6 +183,8 @@ class ContentVisual
                 $layers[] = [20, $y - 12, 100, 32, 16, '#52657b', (string) round($max * $tick / 4, 2)];
             }
             $previous = null;
+            $missing = false;
+            $labelledPoints = [];
             $lastLabelX = -100;
             $count = count($visual['labels']);
             foreach ($visual['labels'] as $i => $year) {
@@ -192,23 +195,50 @@ class ContentVisual
                 }
                 $value = $visual['values'][$i];
                 if ($value === null) {
-                    $previous = null;
+                    $missing = true;
 
                     continue;
                 }
                 $y = 620 - (int) round(340 * $value / $max);
                 $points[] = [$x, $y];
                 if ($previous !== null) {
-                    $lines[] = [$previous[0], $previous[1], $x, $y];
+                    if ($missing) {
+                        $dottedLines[] = [$previous[0], $previous[1], $x, $y];
+                    } else {
+                        $lines[] = [$previous[0], $previous[1], $x, $y];
+                    }
                 }
-                if ($count <= 10) {
-                    $layers[] = [$x - 25, $y - 34, 90, 28, 16, '#087f8c', (string) $value];
-                }
+                $labelledPoints[] = [$x, $y, $value];
+                $missing = false;
                 $previous = [$x, $y];
             }
+            // Reserve the last observation, then label spaced observations without overlapping boxes.
+            $last = array_key_last($labelledPoints);
+            $selected = [$labelledPoints[$last]];
+            foreach ($labelledPoints as $i => $point) {
+                if ($i === $last) {
+                    continue;
+                }
+                $overlaps = false;
+                foreach ($selected as $other) {
+                    if (abs($point[0] - $other[0]) < 145) {
+                        $overlaps = true;
+                        break;
+                    }
+                }
+                if (! $overlaps) {
+                    $selected[] = $point;
+                }
+            }
+            foreach ($selected as [$x, $y, $value]) {
+                $layers[] = [$x - 55, $y - 38, 140, 30, 17, '#087f8c', rtrim(rtrim(number_format($value, 2, '.', ','), '0'), '.').($visual['unit'] === '%' ? '%' : ''), true];
+            }
             $layers[] = [56, 702, 1088, 44, 19, '#087f8c', 'Year · '.$firstYear.'–'.$lastYear.' · '.count($points).' recorded values · Unit: '.$visual['unit']];
-            $layers[] = [56, 754, 1088, 95, 20, '#52657b', $visual['note']];
-            $height = 940;
+            if ($dottedLines) {
+                $layers[] = [56, 750, 1088, 35, 18, '#52657b', 'Dotted bridge = missing data between observations; no values estimated.'];
+            }
+            $layers[] = [56, $dottedLines ? 792 : 754, 1088, 95, 20, '#52657b', $visual['note']];
+            $height = $dottedLines ? 980 : 940;
         } else {
             $layers[] = [56, 125, 1088, 110, 34, '#102d49', $visual['heading'], true];
             $max = $visual['unit'] === '%' ? 100 : max(1, ...$visual['values']);
@@ -238,6 +268,6 @@ class ContentVisual
         $backgrounds[] = [0, $height - 65, 1200, $height, '#102d49'];
         $layers[] = [56, $height - 47, 1088, 35, 18, '#ffffff', 'Source: '.parse_url($sourceUrl, PHP_URL_HOST)];
 
-        return ['width' => 1200, 'height' => $height, 'layers' => $layers, 'bars' => $bars, 'lines' => $lines, 'points' => $points, 'panels' => $panels, 'backgrounds' => $backgrounds];
+        return ['width' => 1200, 'height' => $height, 'layers' => $layers, 'bars' => $bars, 'lines' => $lines, 'dotted_lines' => $dottedLines, 'points' => $points, 'panels' => $panels, 'backgrounds' => $backgrounds];
     }
 }

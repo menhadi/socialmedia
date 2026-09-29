@@ -45,6 +45,14 @@ class PostImage
                 foreach ($layout['lines'] as $line) {
                     array_push($command, '-stroke', '#0891b2', '-strokewidth', '4', '-draw', 'line '.implode(',', $line));
                 }
+                foreach ($layout['dotted_lines'] as [$x1, $y1, $x2, $y2]) {
+                    $steps = max(1, (int) ceil(hypot($x2 - $x1, $y2 - $y1) / 12));
+                    for ($step = 1; $step < $steps; $step++) {
+                        $x = (int) round($x1 + ($x2 - $x1) * $step / $steps);
+                        $y = (int) round($y1 + ($y2 - $y1) * $step / $steps);
+                        array_push($command, '-stroke', 'none', '-fill', '#64748b', '-draw', 'circle '.$x.','.$y.','.($x + 2).','.$y);
+                    }
+                }
                 foreach ($layout['points'] as [$x, $y]) {
                     array_push($command, '-stroke', '#ffffff', '-strokewidth', '2', '-fill', '#087f8c', '-draw', 'circle '.$x.','.$y.','.($x + 5).','.$y);
                 }
@@ -60,12 +68,15 @@ class PostImage
                 }
                 array_push($command, 'png:'.$file);
             }
+            // Contain the entire artwork inside a padded square; never crop source content.
+            array_pop($command);
+            array_push($command, '-resize', '1104x1104>', '-background', '#f7fafc', '-gravity', 'center', '-extent', '1200x1200', 'png:'.$file);
             $process = new Process($command);
             $process->setTimeout(20);
             $process->mustRun();
             $bytes = file_get_contents($file);
             $size = getimagesizefromstring($bytes);
-            if (! $size || $size[0] !== 1200 || $size[1] !== ($post->visual ? $layout['height'] : 900) || strlen($bytes) > 4000000) {
+            if (! $size || $size[0] !== 1200 || $size[1] !== 1200 || strlen($bytes) > 4000000) {
                 throw new RuntimeException('Image rendering failed.');
             }
             $hash = hash('sha256', $bytes);
