@@ -2,8 +2,10 @@
 @section('title','Social accounts')
 @section('content')
 @if($application)@include('application-nav')@endif
-<form class="filter" method="get"><label for="account-brand">Application</label><select id="account-brand" name="brand"><option value="">All applications</option>@foreach($brands as $brand)<option value="{{ $brand->id }}" @selected($application?->id===$brand->id)>{{ $brand->name }}</option>@endforeach</select><input type="hidden" name="provider" value="{{ $selected }}"><button class="button secondary">Show accounts</button></form>
-<div class="page-heading"><div><div class="eyebrow">CONNECT YOUR CHANNELS</div><h1>Every account. One workspace.</h1><p class="muted">Save social account details for each application. Add credentials and test when you are ready.</p></div></div>
+@unless($application)
+<form class="filter" method="get"><label for="account-brand">Application</label><select id="account-brand" name="brand"><option value="">Choose application</option>@foreach($brands as $brand)<option value="{{ $brand->id }}">{{ $brand->name }}</option>@endforeach</select><button class="button secondary">Continue</button></form>
+@endunless
+<div class="page-heading"><div><div class="eyebrow">ACCOUNT CONNECTIONS</div><h1>{{ $application?->name ?? 'Social' }} connection settings</h1><p class="muted">Connect a new account or manage an existing connection.</p></div>@if($application)<a class="button secondary" href="{{ route('applications.show',$application) }}">Back to accounts</a>@endif</div>
 <div class="platform-grid" aria-label="Choose a platform">
     @foreach($providers as $key=>$provider)
         <a class="platform-card {{ $selected===$key?'selected':'' }}" href="{{ route('social',['provider'=>$key,'brand'=>$application?->id]) }}" @if($selected===$key) aria-current="page" @endif><strong>{{ $provider['name'] }}</strong><small>{{ $provider['kind'] }}</small><span>Setup + publishing</span></a>
@@ -19,7 +21,7 @@
         <p>X API requests may require prepaid credits. Connecting an account does not enable automatic publishing or purchase credits.</p>
     </div>
 @endif
-<div class="editor-grid" id="account-setup">
+<details class="connect-account-details" @if($accounts->isEmpty() || $errors->any()) open @endif><summary>＋ Add {{ $setup['name'] }} account</summary><div class="editor-grid" id="account-setup">
     <section class="panel form-panel">
         <h2>Add {{ $setup['name'] }} account</h2>
         <p class="muted small">{{ $setup['description'] }}</p>
@@ -46,14 +48,15 @@
         </div>
     </aside>
 </div>
+</details>
 <div class="section-heading ai-history-heading"><h2>Your saved accounts</h2><span class="muted small">{{ $accounts->count() }} saved</span></div>
 <div class="cards">
 @forelse($accounts as $account)
     @php($accountSetup = $providers[$account->provider])
-    <section class="panel provider-card">
+    <section class="panel provider-card" id="account-{{ $account->id }}">
         <div class="section-heading"><h2>{{ $account->display_name ?: ($account->page_name ?: $accountSetup['name']) }}</h2><span class="badge {{ $account->verified_at?'reviewed':'' }}">{{ $account->verified_at?'Identity verified':'Not tested' }}</span></div>
         <p class="muted small">{{ $account->brand->name }} · {{ $accountSetup['name'] }} · {{ $accountSetup['kind'] }}</p>
-        <p><a href="{{ route('posts',['brand'=>$account->brand_id,'channel'=>$account->provider]) }}">View {{ $accountSetup['name'] }} posts</a></p><p class="small account-identifier">{{ $accountSetup['id_label'] }}: <strong>{{ $account->page_id }}</strong></p>
+        <p><a href="{{ route('posts',['brand'=>$account->brand_id,'channel'=>$account->provider,'account'=>$account->id]) }}">View {{ $accountSetup['name'] }} posts</a></p><p class="small account-identifier">{{ $accountSetup['id_label'] }}: <strong>{{ $account->page_id }}</strong></p>
         <div class="tags"><span>{{ ($account->access_token || $account->oauth_credentials)?'Credentials saved':'Awaiting credentials' }}</span><span>Publishing available</span></div>
         @if($account->provider === 'x')
             @if($account->oauth_credentials)<p class="small">Automatic token renewal enabled. If access is revoked, reconnect here.</p>@endif

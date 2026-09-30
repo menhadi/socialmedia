@@ -9,6 +9,7 @@ use App\Models\MediaConnection;
 use App\Models\Post;
 use App\Models\SocialAccount;
 use App\Services\Research\ContentVisual;
+use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -47,6 +48,18 @@ class HubController extends Controller
         $brands = $this->brands($r)->with('socialAccounts')->withCount('posts')->latest()->get();
 
         return view('applications', compact('brands'));
+    }
+
+    public function application(Request $r, Brand $brand): View
+    {
+        $this->ownBrand($r, $brand);
+        $accounts = $brand->socialAccounts()->orderBy('provider')->get();
+        $counts = [];
+        foreach ($accounts as $account) {
+            $counts[$account->id] = Post::forSocialAccount($account)->whereNull('archived_at')->count();
+        }
+
+        return view('application', ['application' => $brand, 'accounts' => $accounts, 'counts' => $counts]);
     }
 
     public function brandForm(Request $r, ?Brand $brand = null)
@@ -92,9 +105,16 @@ class HubController extends Controller
         }
         $application = $r->filled('brand') ? $brands->firstWhere('id', $r->integer('brand')) : null;
         abort_if($r->filled('brand') && ! $application, 404);
+        $account = null;
+        if ($r->filled('account')) {
+            $account = SocialAccount::whereIn('brand_id', $brands->pluck('id'))->findOrFail($r->integer('account'));
+            abort_if(($application && $application->id !== $account->brand_id) || ($r->filled('channel') && $r->input('channel') !== $account->provider), 404);
+            $application = $brands->firstWhere('id', $account->brand_id);
+            $query->forSocialAccount($account);
+        }
         $posts = $query->latest()->paginate(20)->withQueryString();
 
-        return view('posts', compact('posts', 'brands', 'application'));
+        return view('posts', compact('posts', 'brands', 'application', 'account'));
     }
 
     public function postForm(Request $r, ?Post $post = null)

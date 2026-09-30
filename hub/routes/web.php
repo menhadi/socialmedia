@@ -82,6 +82,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/applications', [HubController::class, 'applications'])->name('applications');
     Route::get('/applications/new', [HubController::class, 'brandForm'])->name('applications.create');
     Route::post('/applications', [HubController::class, 'saveBrand'])->name('applications.store');
+    Route::get('/applications/{brand}', [HubController::class, 'application'])->name('applications.show');
     Route::get('/applications/{brand}/edit', [HubController::class, 'brandForm'])->name('applications.edit');
     Route::put('/applications/{brand}', [HubController::class, 'saveBrand'])->name('applications.update');
     Route::get('/posts', [HubController::class, 'posts'])->name('posts');

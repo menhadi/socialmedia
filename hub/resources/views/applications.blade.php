@@ -1,7 +1,17 @@
 @extends('layouts.app')
 @section('title','Applications')
 @section('content')
-<div class="page-heading"><div><div class="eyebrow">EVERY BRAND HAS A VOICE</div><h1>Your applications</h1><p class="muted">Add any website, product or organization. Keep its content distinct.</p></div><a class="button" href="{{ route('applications.create') }}">＋ Add application</a></div>
-<div class="cards">@forelse($brands as $brand)<article class="panel brand-card"><span class="app-icon">{{ mb_substr($brand->name,0,1) }}</span><h2>{{ $brand->name }}</h2><p class="muted">{{ \Illuminate\Support\Str::limit($brand->description?:'Add a description to guide future content.',130) }}</p><div class="tags"><span>{{ $brand->language }}</span><span>{{ $brand->posts_count }} posts</span></div><div class="tags">@foreach($brand->socialAccounts->unique('provider') as $account)<a href="{{ route('posts',['brand'=>$brand->id,'channel'=>$account->provider]) }}">{{ \App\Models\Post::CHANNELS[$account->provider] ?? ucfirst($account->provider) }} posts</a>@endforeach</div><div class="card-footer"><a href="{{ route('social',['brand'=>$brand->id]) }}">Social accounts</a><a href="{{ route('applications.edit',$brand) }}">Manage application →</a><a href="{{ route('posts',['brand'=>$brand->id]) }}">Posts</a></div></article>@empty<div class="panel empty wide"><span class="empty-icon">▦</span><h2>Make room for your first brand.</h2><p>Start with a name and a voice. Add sources and social connections later.</p><a class="button" href="{{ route('applications.create') }}">Add application</a></div>@endforelse</div>
+<div class="page-heading"><div><div class="eyebrow">STEP 1 · CHOOSE AN APPLICATION</div><h1>Your applications</h1><p class="muted">Open an application, choose its social account, then manage its posts.</p></div><a class="button secondary" href="{{ route('applications.create') }}">＋ Add application</a></div>
+<div class="cards application-cards">
+@forelse($brands as $brand)
+<article class="panel brand-card">
+    <span class="app-icon">{{ mb_substr($brand->name,0,1) }}</span><h2><a href="{{ route('applications.show',$brand) }}">{{ $brand->name }}</a></h2>
+    <p class="muted">{{ \Illuminate\Support\Str::limit($brand->description ?: $brand->website ?: 'Your content and social accounts, together.',110) }}</p>
+    <div class="tags"><span>{{ $brand->socialAccounts->count() }} social accounts</span><span>{{ $brand->posts_count }} posts</span></div>
+    <div class="card-footer"><a class="button" href="{{ route('applications.show',$brand) }}">Open application →</a><a href="{{ route('applications.edit',$brand) }}">Settings</a></div>
+</article>
+@empty
+<div class="panel empty wide"><h2>Add your first application</h2><p>Keep each brand’s accounts and posts together.</p><a class="button" href="{{ route('applications.create') }}">Add application</a></div>
+@endforelse
+</div>
 @endsection
-

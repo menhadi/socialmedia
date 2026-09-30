@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Services\Research\ContentVisual;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Validation\ValidationException;
@@ -16,6 +17,15 @@ class Post extends Model
     protected function casts(): array
     {
         return ['reviewed_at' => 'datetime', 'archived_at' => 'datetime', 'visual' => 'array', 'card_images' => 'array', 'card_sources' => 'array'];
+    }
+
+    public function scopeForSocialAccount(Builder $query, SocialAccount $account): Builder
+    {
+        return $query->where('brand_id', $account->brand_id)->where('channel', $account->provider)
+            ->where(fn ($query) => $query
+                ->whereHas('publications', fn ($query) => $query->where('social_account_id', $account->id))
+                ->orWhereHas('schedules', fn ($query) => $query->where('social_account_id', $account->id))
+                ->orWhere(fn ($query) => $query->doesntHave('publications')->doesntHave('schedules')));
     }
 
     public function brand()

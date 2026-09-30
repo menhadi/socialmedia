@@ -66,16 +66,21 @@ class AutomationController extends Controller
     public function bulkArchive(Request $r): RedirectResponse
     {
         $data = $r->validate([
+            'account' => 'nullable|integer',
             'scope' => ['required', Rule::in(['selected', 'filtered'])],
             'post_ids' => 'required_if:scope,selected|array|min:1|max:1000',
             'post_ids.*' => 'required|integer|distinct',
             'brand' => ['nullable', Rule::exists('brands', 'id')->where('user_id', $r->user()->id)],
             'channel' => ['nullable', Rule::in(array_keys(Post::CHANNELS))],
         ]);
-        $count = DB::transaction(function () use ($r, $data): int {
+        $account = $r->filled('account') ? SocialAccount::whereHas('brand', fn ($query) => $query->where('user_id', $r->user()->id))->findOrFail($r->integer('account')) : null;
+        $count = DB::transaction(function () use ($r, $data, $account): int {
             $query = Post::whereHas('brand', fn ($query) => $query->where('user_id', $r->user()->id))
                 ->when($r->filled('brand'), fn ($query) => $query->where('brand_id', $data['brand']))
                 ->when($r->filled('channel'), fn ($query) => $query->where('channel', $data['channel']));
+            if ($account) {
+                $query->forSocialAccount($account);
+            }
             if ($data['scope'] === 'selected') {
                 $query->whereIn('id', $data['post_ids']);
             } else {
@@ -95,7 +100,7 @@ class AutomationController extends Controller
             return $posts->count();
         });
 
-        return redirect()->route('posts', $r->only(['brand', 'channel']))
+        return redirect()->route('posts', $r->only(['brand', 'channel', 'account']))
             ->with('success', $count.' posts archived in Content Hub. Queued publishing cancelled; platform posts remain unchanged.');
     }
 

@@ -43,10 +43,33 @@ class ApplicationWorkspaceTest extends TestCase
         $this->get(route('social', ['brand' => $brand->id]))->assertOk()->assertSee('Matching account')->assertDontSee('Other account');
         $this->get(route('posts', ['brand' => $brand->id, 'channel' => 'x']))->assertOk()->assertSee($match->title)->assertDontSee($wrongPlatform->title)->assertDontSee($wrongBrand->title);
         $this->get(route('posts.create', ['brand' => $brand->id, 'channel' => 'x']))->assertOk()->assertViewHas('post', fn ($post) => $post->brand_id === $brand->id && $post->channel === 'x');
-        $this->get(route('applications'))->assertOk()->assertSee(route('social', ['brand' => $brand->id]), false);
+        $this->get(route('applications'))->assertOk()->assertSee(route('applications.show', $brand), false);
         $foreign = Brand::factory()->create();
         $this->get(route('social', ['brand' => $foreign->id]))->assertNotFound();
         $this->get(route('posts', ['brand' => $foreign->id]))->assertNotFound();
+    }
+
+    public function test_account_workspace_and_bulk_archive_exclude_other_accounts_on_same_platform(): void
+    {
+        $brand = $this->application();
+        $account = SocialAccount::factory()->create(['brand_id' => $brand->id]);
+        $other = SocialAccount::factory()->create(['brand_id' => $brand->id]);
+        $ownPublication = Publication::factory()->create(['social_account_id' => $account->id, 'status' => 'published']);
+        $otherPublication = Publication::factory()->create(['social_account_id' => $other->id, 'status' => 'published']);
+        $ownPublication->post->update(['title' => 'Selected account history']);
+        $otherPublication->post->update(['title' => 'Other account history']);
+        $draft = $this->postFor($brand);
+        $filters = ['brand' => $brand->id, 'channel' => 'facebook', 'account' => $account->id];
+        $this->get(route('applications.show', $brand))->assertOk()->assertSee('View posts')->assertSee(route('posts', $filters));
+        $this->get(route('posts', $filters))->assertOk()->assertSee('Selected account history')->assertDontSee('Other account history')->assertSee($draft->title);
+        $this->post(route('posts.bulk-archive'), $filters + ['scope' => 'filtered'])->assertRedirect();
+        $this->assertNotNull($ownPublication->post->fresh()->archived_at);
+        $this->assertNotNull($draft->fresh()->archived_at);
+        $this->assertNull($otherPublication->post->fresh()->archived_at);
+        $foreign = SocialAccount::factory()->create();
+        $this->get(route('posts', ['account' => $foreign->id]))->assertNotFound();
+        $this->post(route('posts.bulk-archive'), ['account' => $foreign->id, 'scope' => 'filtered'])->assertNotFound();
+        $this->get(route('applications.show', $foreign->brand))->assertNotFound();
     }
 
     public function test_selected_archive_is_idempotent_and_preserves_published_posts(): void
@@ -99,6 +122,6 @@ class ApplicationWorkspaceTest extends TestCase
         $account = SocialAccount::factory()->create(['brand_id' => $brand->id]);
         $publication = Publication::factory()->create(['social_account_id' => $account->id, 'status' => 'uncertain']);
         $this->post(route('posts.bulk-archive'), ['scope' => 'selected', 'post_ids' => [$first->id, $publication->post_id]])->assertSessionHasErrors('post_ids');
-        $this->assertSame(0,Post::whereNotNull('archived_at')->count());
+        $this->assertSame(0, Post::whereNotNull('archived_at')->count());
     }
 }
