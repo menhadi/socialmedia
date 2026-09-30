@@ -63,6 +63,42 @@ class AutomationController extends Controller
         return back()->with('success', 'Content approved for assessment.');
     }
 
+    public function bulkArchive(Request $r): RedirectResponse
+    {
+        $data = $r->validate([
+            'scope' => ['required', Rule::in(['selected', 'filtered'])],
+            'post_ids' => 'required_if:scope,selected|array|min:1|max:1000',
+            'post_ids.*' => 'required|integer|distinct',
+            'brand' => ['nullable', Rule::exists('brands', 'id')->where('user_id', $r->user()->id)],
+            'channel' => ['nullable', Rule::in(array_keys(Post::CHANNELS))],
+        ]);
+        $count = DB::transaction(function () use ($r, $data): int {
+            $query = Post::whereHas('brand', fn ($query) => $query->where('user_id', $r->user()->id))
+                ->when($r->filled('brand'), fn ($query) => $query->where('brand_id', $data['brand']))
+                ->when($r->filled('channel'), fn ($query) => $query->where('channel', $data['channel']));
+            if ($data['scope'] === 'selected') {
+                $query->whereIn('id', $data['post_ids']);
+            } else {
+                $query->whereNull('archived_at');
+            }
+            $posts = $query->orderBy('id')->lockForUpdate()->get();
+            abort_if($data['scope'] === 'selected' && $posts->count() !== count($data['post_ids']), 404);
+            foreach ($posts as $post) {
+                if ($post->publications()->whereIn('status', ['publishing', 'uncertain'])->exists()
+                    || $post->schedules()->whereIn('status', ['running', 'processing', 'uncertain'])->exists()) {
+                    throw ValidationException::withMessages(['post_ids' => 'No posts were archived. Resolve active or uncertain publishing for "'.$post->title.'" first.']);
+                }
+                $post->schedules()->where('status', 'queued')->update(['status' => 'cancelled', 'reason' => 'Post archived in Content Hub.']);
+                $post->forceFill(['archived_at' => $post->archived_at ?? now()])->save();
+            }
+
+            return $posts->count();
+        });
+
+        return redirect()->route('posts', $r->only(['brand', 'channel']))
+            ->with('success', $count.' posts archived in Content Hub. Queued publishing cancelled; platform posts remain unchanged.');
+    }
+
     public function archive(Request $r, Post $post): RedirectResponse
     {
         abort_unless($post->brand->user_id === $r->user()->id, 404);

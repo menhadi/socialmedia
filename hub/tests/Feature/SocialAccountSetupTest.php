@@ -50,7 +50,7 @@ class SocialAccountSetupTest extends TestCase
         $brand = $this->brand();
         $this->get('/social-accounts?provider='.$provider)->assertOk()->assertSee('Verify when you are ready');
         $payload = ['provider' => $provider, 'brand_id' => $brand->id, 'page_id' => $id, 'display_name' => 'My saved account'] + $settings;
-        $this->post('/social-accounts', $payload)->assertSessionHasNoErrors()->assertRedirect(route('social', ['provider' => $provider]));
+        $this->post('/social-accounts', $payload)->assertSessionHasNoErrors()->assertRedirect(route('social', ['provider' => $provider, 'brand' => $brand->id]));
         $account = SocialAccount::firstOrFail();
         $this->assertSame($provider, $account->provider);
         $this->assertSame($brand->id, $account->brand_id);

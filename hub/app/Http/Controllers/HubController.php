@@ -44,7 +44,7 @@ class HubController extends Controller
 
     public function applications(Request $r)
     {
-        $brands = $this->brands($r)->withCount('posts')->latest()->get();
+        $brands = $this->brands($r)->with('socialAccounts')->withCount('posts')->latest()->get();
 
         return view('applications', compact('brands'));
     }
@@ -87,15 +87,25 @@ class HubController extends Controller
         if ($r->filled('brand')) {
             $query->where('brand_id', $r->integer('brand'));
         }
+        if ($r->filled('channel')) {
+            $query->where('channel', $r->string('channel')->toString());
+        }
+        $application = $r->filled('brand') ? $brands->firstWhere('id', $r->integer('brand')) : null;
+        abort_if($r->filled('brand') && ! $application, 404);
         $posts = $query->latest()->paginate(20)->withQueryString();
 
-        return view('posts', compact('posts', 'brands'));
+        return view('posts', compact('posts', 'brands', 'application'));
     }
 
     public function postForm(Request $r, ?Post $post = null)
     {
         if ($post) {
             $this->ownBrand($r, $post->brand);
+        }
+
+        if (! $post && $r->filled('brand')) {
+            $brand = $this->brands($r)->findOrFail($r->integer('brand'));
+            $post = (new Post)->forceFill(['brand_id' => $brand->id, 'channel' => array_key_exists($r->query('channel', ''), Post::CHANNELS) ? $r->query('channel') : 'facebook']);
         }
 
         return view('post-form', ['post' => $post ?? new Post, 'brands' => $this->brands($r)->orderBy('name')->get()]);

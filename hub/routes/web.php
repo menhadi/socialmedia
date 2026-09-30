@@ -39,6 +39,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/automation/content/{item}/approve', [AutomationController::class, 'approve'])->name('automation.approve');
     Route::post('/automation/{brand}/token', [ApplicationIntakeController::class, 'token'])->name('automation.token');
     Route::post('/posts/{post}/assess', [AutomationController::class, 'assess'])->middleware('throttle:5,1')->name('posts.assess');
+    Route::post('/posts/bulk-archive', [AutomationController::class, 'bulkArchive'])->name('posts.bulk-archive');
     Route::post('/posts/{post}/archive', [AutomationController::class, 'archive'])->name('posts.archive');
     Route::get('/analytics', [AnalyticsController::class, 'index'])->name('analytics');
     Route::post('/analytics/{publication}/refresh', [AnalyticsController::class, 'refresh'])->middleware('throttle:5,1')->name('analytics.refresh');

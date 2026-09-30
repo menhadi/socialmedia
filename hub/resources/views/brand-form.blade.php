@@ -1,6 +1,7 @@
 @extends('layouts.app')
 @section('title',$brand->exists?'Edit application':'Add application')
 @section('content')
+@if($brand->exists)@include('application-nav',['application'=>$brand])@endif
 <div class="page-heading"><div><a class="back" href="{{ route('applications') }}">← Applications</a><h1>{{ $brand->exists?'Shape your application.':'Give your brand a home.' }}</h1><p class="muted">These details guide the content you create for this application.</p></div></div>
 <form class="panel form-panel" method="post" action="{{ $brand->exists?route('applications.update',$brand):route('applications.store') }}">@csrf @if($brand->exists) @method('PUT') @endif
 <div class="form-section"><h2>The essentials</h2><div class="form-grid"><label>Application name <span>*</span><input name="name" maxlength="150" required value="{{ old('name',$brand->name) }}" placeholder="Your product or organization"></label><label>Website<input name="website" type="url" maxlength="2048" value="{{ old('website',$brand->website) }}" placeholder="https://your-website.com"></label></div><label>Description<textarea name="description" rows="3" maxlength="5000" placeholder="What does your application do?">{{ old('description',$brand->description) }}</textarea></label></div>

@@ -1,10 +1,12 @@
 @extends('layouts.app')
 @section('title','Social accounts')
 @section('content')
+@if($application)@include('application-nav')@endif
+<form class="filter" method="get"><label for="account-brand">Application</label><select id="account-brand" name="brand"><option value="">All applications</option>@foreach($brands as $brand)<option value="{{ $brand->id }}" @selected($application?->id===$brand->id)>{{ $brand->name }}</option>@endforeach</select><input type="hidden" name="provider" value="{{ $selected }}"><button class="button secondary">Show accounts</button></form>
 <div class="page-heading"><div><div class="eyebrow">CONNECT YOUR CHANNELS</div><h1>Every account. One workspace.</h1><p class="muted">Save social account details for each application. Add credentials and test when you are ready.</p></div></div>
 <div class="platform-grid" aria-label="Choose a platform">
     @foreach($providers as $key=>$provider)
-        <a class="platform-card {{ $selected===$key?'selected':'' }}" href="{{ route('social',['provider'=>$key]) }}" @if($selected===$key) aria-current="page" @endif><strong>{{ $provider['name'] }}</strong><small>{{ $provider['kind'] }}</small><span>Setup + publishing</span></a>
+        <a class="platform-card {{ $selected===$key?'selected':'' }}" href="{{ route('social',['provider'=>$key,'brand'=>$application?->id]) }}" @if($selected===$key) aria-current="page" @endif><strong>{{ $provider['name'] }}</strong><small>{{ $provider['kind'] }}</small><span>Setup + publishing</span></a>
     @endforeach
 </div>
 @php($setup = $providers[$selected])
@@ -27,7 +29,7 @@
             <form method="post" action="{{ route('social.store') }}">
                 @csrf
                 <input type="hidden" name="provider" value="{{ $selected }}">
-                <label>Application<select name="brand_id" required><option value="">Choose an application</option>@foreach($brands as $brand)<option value="{{ $brand->id }}" @selected(old('brand_id')==$brand->id)>{{ $brand->name }}</option>@endforeach</select></label>
+                <label>Application<select name="brand_id" required><option value="">Choose an application</option>@foreach($brands as $brand)<option value="{{ $brand->id }}" @selected(old('brand_id',$application?->id)==$brand->id)>{{ $brand->name }}</option>@endforeach</select></label>
                 <label>{{ $setup['id_label'] }}<input name="page_id" required maxlength="50" value="{{ old('page_id') }}" placeholder="{{ $selected==='linkedin'?'urn:li:organization:123456':($selected==='youtube'?'UC…':'Numeric account ID') }}"></label>
                 <p class="muted small">{{ $setup['id_hint'] }}</p>
                 @include('social-account-fields',['platform'=>$selected,'setup'=>$setup,'editing'=>false,'account'=>null])
@@ -51,7 +53,7 @@
     <section class="panel provider-card">
         <div class="section-heading"><h2>{{ $account->display_name ?: ($account->page_name ?: $accountSetup['name']) }}</h2><span class="badge {{ $account->verified_at?'reviewed':'' }}">{{ $account->verified_at?'Identity verified':'Not tested' }}</span></div>
         <p class="muted small">{{ $account->brand->name }} · {{ $accountSetup['name'] }} · {{ $accountSetup['kind'] }}</p>
-        <p class="small account-identifier">{{ $accountSetup['id_label'] }}: <strong>{{ $account->page_id }}</strong></p>
+        <p><a href="{{ route('posts',['brand'=>$account->brand_id,'channel'=>$account->provider]) }}">View {{ $accountSetup['name'] }} posts</a></p><p class="small account-identifier">{{ $accountSetup['id_label'] }}: <strong>{{ $account->page_id }}</strong></p>
         <div class="tags"><span>{{ ($account->access_token || $account->oauth_credentials)?'Credentials saved':'Awaiting credentials' }}</span><span>Publishing available</span></div>
         @if($account->provider === 'x')
             @if($account->oauth_credentials)<p class="small">Automatic token renewal enabled. If access is revoked, reconnect here.</p>@endif

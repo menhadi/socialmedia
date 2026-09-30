@@ -2,7 +2,7 @@
 @section('title',$post->exists?'Edit post':'Create post')
 @section('content')
 @php($locked = $post->exists && ($post->archived_at || !in_array($post->status,['draft','reviewed']) || $post->publications()->whereIn('status',['publishing','published','uncertain'])->exists() || $post->schedules()->whereIn('status',['running','uncertain'])->exists()))
-<div class="page-heading"><div><a class="back" href="{{ route('posts') }}">← Content library</a><h1>Make something worth sharing.</h1><p class="muted">Save a draft, refine your message and review it when ready.</p></div></div>
+<div class="page-heading"><div><a class="back" href="{{ route('posts',['brand'=>$post->brand_id,'channel'=>$post->channel]) }}">← Content library</a><h1>Make something worth sharing.</h1><p class="muted">Save a draft, refine your message and review it when ready.</p></div></div>
 @if($post->exists)
 <div class="notice"><strong>Automation & history</strong><p>{{ $post->automation_reason ?: 'No automatic schedule has been requested for this saved post.' }}</p>
 @if($post->learning_note)<p>{{ $post->learning_note }}</p>@endif

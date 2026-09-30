@@ -24,8 +24,11 @@ class SocialAccountController extends Controller
 
     public function index(Request $request): View
     {
-        $accounts = SocialAccount::whereHas('brand', fn ($query) => $query->where('user_id', $request->user()->id))->with('brand')->latest()->get();
+        $accounts = SocialAccount::whereHas('brand', fn ($query) => $query->where('user_id', $request->user()->id))->when($request->filled('brand'), fn ($query) => $query->where('brand_id', $request->integer('brand')))->with('brand')->latest()->get();
         $brands = Brand::where('user_id', $request->user()->id)->orderBy('name')->get();
+
+        $application = $request->filled('brand') ? $brands->firstWhere('id', $request->integer('brand')) : null;
+        abort_if($request->filled('brand') && ! $application, 404);
 
         $providers = AccountSetup::PROVIDERS;
         $selected = $request->old('provider', $request->query('provider', 'facebook'));
@@ -33,7 +36,7 @@ class SocialAccountController extends Controller
             $selected = 'facebook';
         }
 
-        return view('social-accounts', compact('accounts', 'brands', 'providers', 'selected'));
+        return view('social-accounts', compact('accounts', 'brands', 'providers', 'selected', 'application'));
     }
 
     public function store(Request $request): RedirectResponse
@@ -63,7 +66,7 @@ class SocialAccountController extends Controller
             ])->save();
         }, 5);
 
-        return redirect()->route('social', ['provider' => $provider])->with('success', $provider === 'facebook'
+        return redirect()->route('social', ['provider' => $provider, 'brand' => $data['brand_id']])->with('success', $provider === 'facebook'
             ? 'Page setup saved. Add a token and verify its identity before publishing.'
             : 'Account setup saved. Add a token and verify the account before publishing.');
     }
