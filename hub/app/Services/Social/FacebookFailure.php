@@ -15,6 +15,7 @@ class FacebookFailure extends RuntimeException
     {
         return match ($reason) {
             'platform_token' => 'The access token expired or was rejected. Save a new token and verify the account.',
+            'platform_credits' => 'The platform requires API credits. Check your developer billing balance and spending limit before trying again.',
             'platform_permission' => 'The platform denied access. Check your app permissions, subscription and account role.',
             'platform_invalid' => 'The platform rejected the details. Check the text, media, destination and channel options.',
             'platform_identity' => 'The token did not identify the saved account. Check the account ID and token.',

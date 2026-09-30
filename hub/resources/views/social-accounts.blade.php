@@ -8,6 +8,15 @@
     @endforeach
 </div>
 @php($setup = $providers[$selected])
+@if($selected === 'x')
+    <div class="notice"><strong>Connect X with automatic renewal</strong>
+        <p>Save the X account ID below, then use Connect X on that account. Sign in to the matching brand on X and review its permission screen. Each brand authorizes separately.</p>
+        @unless(\App\Services\Social\XToken::configured())
+            <p>Server setup required: configure X_CLIENT_ID, X_CLIENT_SECRET and X_REDIRECT_URI for your confidential Web App. Callback path: <code>/social-accounts/x/callback</code>.</p>
+        @endunless
+        <p>X API requests may require prepaid credits. Connecting an account does not enable automatic publishing or purchase credits.</p>
+    </div>
+@endif
 <div class="editor-grid" id="account-setup">
     <section class="panel form-panel">
         <h2>Add {{ $setup['name'] }} account</h2>
@@ -44,6 +53,11 @@
         <p class="muted small">{{ $account->brand->name }} · {{ $accountSetup['name'] }} · {{ $accountSetup['kind'] }}</p>
         <p class="small account-identifier">{{ $accountSetup['id_label'] }}: <strong>{{ $account->page_id }}</strong></p>
         <div class="tags"><span>{{ ($account->access_token || $account->oauth_credentials)?'Credentials saved':'Awaiting credentials' }}</span><span>Publishing available</span></div>
+        @if($account->provider === 'x')
+            @if($account->oauth_credentials)<p class="small">Automatic token renewal enabled. If access is revoked, reconnect here.</p>@endif
+            <form method="post" action="{{ route('social.x.connect', $account) }}">@csrf<button class="button secondary" @disabled(! \App\Services\Social\XToken::configured())>{{ $account->oauth_credentials ? 'Reconnect X' : 'Connect X' }}</button></form>
+            <p class="muted small">Allows reading account/post information, publishing posts and media, and renewing access until revoked. Reconnecting changes credentials; check existing publishing schedules afterward.</p>
+        @endif
         @if($account->error_code)<div class="notice error">{{ \App\Services\Social\FacebookFailure::description($account->error_code) }}</div>@endif
         @if($account->access_token || $account->oauth_credentials)
             <form method="post" action="{{ route('social.verify',$account) }}">@csrf<button class="button secondary">Verify account</button></form>

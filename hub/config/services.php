@@ -2,6 +2,12 @@
 
 return [
 
+    'x' => [
+        'client_id' => env('X_CLIENT_ID'),
+        'client_secret' => env('X_CLIENT_SECRET'),
+        'redirect_uri' => env('X_REDIRECT_URI'),
+    ],
+
     'facebook' => ['version' => env('FACEBOOK_GRAPH_VERSION', 'v25.0'), 'app_secret' => env('FACEBOOK_APP_SECRET'), 'webhook_verify_token' => env('FACEBOOK_WEBHOOK_VERIFY_TOKEN')],
     'linkedin' => ['version' => env('LINKEDIN_API_VERSION', '202606')],
 

@@ -16,7 +16,11 @@ class PlatformClient
 
     private function request(SocialAccount $account): PendingRequest
     {
-        $token = $account->provider === 'youtube' ? app(YouTubeToken::class)->accessToken($account) : $account->access_token;
+        $token = match ($account->provider) {
+            'youtube' => app(YouTubeToken::class)->accessToken($account),
+            'x' => app(XToken::class)->accessToken($account),
+            default => $account->access_token,
+        };
         $request = Http::withToken($token)->acceptJson()->connectTimeout(5)->timeout(60)->withoutRedirecting();
         if ($account->provider === 'linkedin') {
             $request->withHeaders(['LinkedIn-Version' => config('services.linkedin.version'), 'X-Restli-Protocol-Version' => '2.0.0']);
@@ -43,10 +47,10 @@ class PlatformClient
             return $response;
         }
         $reason = match ($response->status()) {
-            401 => 'platform_token', 403 => 'platform_permission', 429 => 'platform_rate',
+            401 => 'platform_token', 402 => 'platform_credits', 403 => 'platform_permission', 429 => 'platform_rate',
             400, 404, 422 => 'platform_invalid', default => 'platform_response',
         };
-        throw new FacebookFailure($reason, $publishing && ! in_array($response->status(), [400, 401, 403, 404, 422, 429], true));
+        throw new FacebookFailure($reason, $publishing && ! in_array($response->status(), [400, 401, 402, 403, 404, 422, 429], true));
     }
 
     private function identifier(mixed $value, string $pattern = '/^[0-9]{1,50}$/D', bool $publishing = false): string

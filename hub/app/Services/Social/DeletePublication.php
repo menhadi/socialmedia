@@ -53,7 +53,8 @@ class DeletePublication
             return $attempt;
         }
         try {
-            $http = Http::withToken($account->access_token)->acceptJson()->connectTimeout(5)->timeout(25)->withoutRedirecting();
+            $token = $account->provider === 'x' ? app(XToken::class)->accessToken($account) : $account->access_token;
+            $http = Http::withToken($token)->acceptJson()->connectTimeout(5)->timeout(25)->withoutRedirecting();
             $id = rawurlencode($publication->remote_post_id);
             $response = match ($publication->provider) {
                 'facebook' => $http->delete('https://graph.facebook.com/'.config('services.facebook.version').'/'.$id),

@@ -16,6 +16,7 @@ use App\Http\Controllers\PublishingAssetController;
 use App\Http\Controllers\ResearchController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SocialAccountController;
+use App\Http\Controllers\XAuthorizationController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/publishing-assets/{publication}', PublishingAssetController::class)->middleware(['signed', 'throttle:120,1'])->name('publishing.asset');
@@ -25,6 +26,8 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 });
 Route::middleware('auth')->group(function () {
+    Route::get('/social-accounts/x/callback', [XAuthorizationController::class, 'callback'])->middleware('throttle:10,1')->name('social.x.callback');
+    Route::post('/social-accounts/{account}/x/connect', [XAuthorizationController::class, 'connect'])->middleware('throttle:10,1')->name('social.x.connect');
     Route::post('/posts/{post}/plan-cards', CardPlanController::class)->middleware('throttle:5,1')->name('posts.cards.plan');
     Route::get('/publications/{publication}/delete', [PublicationDeletionController::class, 'preview'])->name('publications.delete.preview');
     Route::post('/publications/{publication}/delete', [PublicationDeletionController::class, 'destroy'])->middleware('throttle:5,1')->name('publications.delete');

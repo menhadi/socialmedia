@@ -4,6 +4,7 @@ namespace App\Services\Analytics;
 
 use App\Models\AnalyticsSnapshot;
 use App\Models\Publication;
+use App\Services\Social\XToken;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 
@@ -36,7 +37,8 @@ class CollectAnalytics
 
                 return;
             }
-            $http = Http::withToken($account->access_token)->acceptJson()->connectTimeout(5)->timeout(15)->withoutRedirecting();
+            $token = $provider === 'x' ? app(XToken::class)->accessToken($account) : $account->access_token;
+            $http = Http::withToken($token)->acceptJson()->connectTimeout(5)->timeout(15)->withoutRedirecting();
             $graph = 'https://'.($provider === 'instagram' && ($account->settings['login_method'] ?? 'facebook') === 'instagram' ? 'graph.instagram.com' : 'graph.facebook.com').'/'.config('services.facebook.version');
             $response = match ($provider) {
                 'facebook' => $http->get($graph.'/'.$id, ['fields' => 'id,reactions.limit(0).summary(true),comments.limit(0).summary(true),shares']),
