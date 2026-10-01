@@ -14,4 +14,5 @@
 <div class="panel empty wide"><h2>Add your first application</h2><p>Keep each brand’s accounts and posts together.</p><a class="button" href="{{ route('applications.create') }}">Add application</a></div>
 @endforelse
 </div>
+<div class="application-secondary"><a href="{{ route('social') }}">All social connections</a></div>
 @endsection

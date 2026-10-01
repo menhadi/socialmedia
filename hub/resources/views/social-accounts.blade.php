@@ -5,14 +5,16 @@
 @unless($application)
 <form class="filter" method="get"><label for="account-brand">Application</label><select id="account-brand" name="brand"><option value="">Choose application</option>@foreach($brands as $brand)<option value="{{ $brand->id }}">{{ $brand->name }}</option>@endforeach</select><button class="button secondary">Continue</button></form>
 @endunless
-<div class="page-heading"><div><div class="eyebrow">ACCOUNT CONNECTIONS</div><h1>{{ $application?->name ?? 'Social' }} connection settings</h1><p class="muted">Connect a new account or manage an existing connection.</p></div>@if($application)<a class="button secondary" href="{{ route('applications.show',$application) }}">Back to accounts</a>@endif</div>
+<div class="page-heading"><div><div class="eyebrow">ACCOUNT CONNECTIONS</div><h1>{{ $editingAccount ? $providers[$selected]['name'].' account settings' : ($adding ? 'Add an account to '.$application->name : ($application?->name ?? 'Social').' connections') }}</h1><p class="muted">{{ $editingAccount ? ($editingAccount->display_name ?: $editingAccount->page_name ?: $application->name).' · '.$application->name : 'Choose a platform and connect your account.' }}</p></div>@if($application)<a class="button secondary" href="{{ route('applications.show',$application) }}">Back to accounts</a>@endif</div>
+@unless($editingAccount)
 <div class="platform-grid" aria-label="Choose a platform">
     @foreach($providers as $key=>$provider)
-        <a class="platform-card {{ $selected===$key?'selected':'' }}" href="{{ route('social',['provider'=>$key,'brand'=>$application?->id]) }}" @if($selected===$key) aria-current="page" @endif><strong>{{ $provider['name'] }}</strong><small>{{ $provider['kind'] }}</small><span>Setup + publishing</span></a>
+        <a class="platform-card {{ $selected===$key?'selected':'' }}" href="{{ ($adding ? route('applications.accounts.create', ['brand'=>$application->id,'provider'=>$key]) : route('social',['provider'=>$key,'brand'=>$application?->id])) }}" @if($selected===$key) aria-current="page" @endif><strong>{{ $provider['name'] }}</strong><small>{{ $provider['kind'] }}</small><span>Setup + publishing</span></a>
     @endforeach
 </div>
+@endunless
 @php($setup = $providers[$selected])
-@if($selected === 'x')
+@if($selected === 'x' && !$editingAccount)
     <div class="notice"><strong>Connect X with automatic renewal</strong>
         <p>Save the X account ID below, then use Connect X on that account. Sign in to the matching brand on X and review its permission screen. Each brand authorizes separately.</p>
         @unless(\App\Services\Social\XToken::configured())
@@ -21,17 +23,18 @@
         <p>X API requests may require prepaid credits. Connecting an account does not enable automatic publishing or purchase credits.</p>
     </div>
 @endif
-<details class="connect-account-details" @if($accounts->isEmpty() || $errors->any()) open @endif><summary>＋ Add {{ $setup['name'] }} account</summary><div class="editor-grid" id="account-setup">
+@unless($editingAccount)
+<details class="connect-account-details" @if($adding || $accounts->isEmpty() || $errors->any()) open @endif><summary>＋ Add {{ $setup['name'] }} account</summary><div class="editor-grid" id="account-setup">
     <section class="panel form-panel">
         <h2>Add {{ $setup['name'] }} account</h2>
         <p class="muted small">{{ $setup['description'] }}</p>
         @if($brands->isEmpty())
             <p>Add an application before saving an account.</p><a class="button" href="{{ route('applications.create') }}">Add application</a>
         @else
-            <form method="post" action="{{ route('social.store') }}">
+            <form method="post" action="{{ ($application ? route('applications.accounts.store',$application) : route('social.store')) }}">
                 @csrf
                 <input type="hidden" name="provider" value="{{ $selected }}">
-                <label>Application<select name="brand_id" required><option value="">Choose an application</option>@foreach($brands as $brand)<option value="{{ $brand->id }}" @selected(old('brand_id',$application?->id)==$brand->id)>{{ $brand->name }}</option>@endforeach</select></label>
+                @if($application)<input type="hidden" name="brand_id" value="{{ $application->id }}"><p class="muted small">Application: <strong>{{ $application->name }}</strong></p>@else<label>Application<select name="brand_id" required><option value="">Choose an application</option>@foreach($brands as $brand)<option value="{{ $brand->id }}" @selected(old('brand_id',$application?->id)==$brand->id)>{{ $brand->name }}</option>@endforeach</select></label>@endif
                 <label>{{ $setup['id_label'] }}<input name="page_id" required maxlength="50" value="{{ old('page_id') }}" placeholder="{{ $selected==='linkedin'?'urn:li:organization:123456':($selected==='youtube'?'UC…':'Numeric account ID') }}"></label>
                 <p class="muted small">{{ $setup['id_hint'] }}</p>
                 @include('social-account-fields',['platform'=>$selected,'setup'=>$setup,'editing'=>false,'account'=>null])
@@ -49,8 +52,10 @@
     </aside>
 </div>
 </details>
-<div class="section-heading ai-history-heading"><h2>Your saved accounts</h2><span class="muted small">{{ $accounts->count() }} saved</span></div>
-<div class="cards">
+@endunless
+@unless($adding)
+@if(!$editingAccount)<div class="section-heading ai-history-heading"><h2>Your saved accounts</h2><span class="muted small">{{ $accounts->count() }} saved</span></div>@endif
+<div class="{{ $editingAccount ? 'account-settings-single' : 'cards' }}">
 @forelse($accounts as $account)
     @php($accountSetup = $providers[$account->provider])
     <section class="panel provider-card" id="account-{{ $account->id }}">
@@ -67,7 +72,7 @@
         @if($account->access_token || $account->oauth_credentials)
             <form method="post" action="{{ route('social.verify',$account) }}">@csrf<button class="button secondary">Verify account</button></form>
         @endif
-        <details class="usage-note">
+        <details class="usage-note" @if($editingAccount) open @endif>
             <summary>Edit saved setup</summary>
             <form method="post" action="{{ route('social.update',$account) }}">
                 @csrf @method('PUT')
@@ -85,4 +90,5 @@
     <div class="panel empty wide"><h3>No accounts saved yet.</h3><p>Choose a platform above and add its details when you are ready.</p></div>
 @endforelse
 </div>
+@endunless
 @endsection

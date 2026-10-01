@@ -72,6 +72,35 @@ class ApplicationWorkspaceTest extends TestCase
         $this->get(route('applications.show', $foreign->brand))->assertNotFound();
     }
 
+    public function test_individual_settings_show_only_selected_account_and_legacy_link_is_scoped(): void
+    {
+        $brand = $this->application();
+        $account = SocialAccount::factory()->create(['brand_id' => $brand->id, 'display_name' => 'My Facebook page']);
+        SocialAccount::factory()->create(['brand_id' => $brand->id, 'display_name' => 'Unrelated account']);
+        foreach ([route('applications.accounts.edit', [$brand, $account]), route('social', ['brand' => $brand->id, 'account' => $account->id])] as $url) {
+            $this->get($url)->assertOk()->assertSee('My Facebook page')->assertDontSee('Unrelated account')
+                ->assertDontSee('Choose a platform')->assertDontSee('Save account setup')->assertSee('Save changes');
+        }
+        $otherBrand = Brand::factory()->create(['user_id' => $brand->user_id]);
+        $this->get(route('applications.accounts.edit', [$otherBrand, $account]))->assertNotFound();
+        $foreign = SocialAccount::factory()->create();
+        $this->get(route('applications.accounts.edit', [$foreign->brand, $foreign]))->assertNotFound();
+    }
+
+    public function test_add_account_is_bound_to_application_and_returns_to_its_settings(): void
+    {
+        $brand = $this->application();
+        $this->get(route('applications.accounts.create', [$brand, 'provider' => 'x']))->assertOk()
+            ->assertSee('Add an account to '.$brand->name)->assertDontSee('name="brand_id" required', false)
+            ->assertSee(route('applications.accounts.store', $brand), false);
+        $payload = ['brand_id' => $brand->id, 'provider' => 'x', 'page_id' => '12345678'];
+        $this->post(route('applications.accounts.store', $brand), $payload)->assertSessionHasNoErrors()
+            ->assertRedirect(route('applications.accounts.edit', [$brand, SocialAccount::firstOrFail()]));
+        $other = Brand::factory()->create(['user_id' => $brand->user_id]);
+        $this->post(route('applications.accounts.store', $brand), array_replace($payload, ['brand_id' => $other->id]))->assertSessionHasErrors('brand_id');
+        $this->assertSame(1, SocialAccount::count());
+    }
+
     public function test_selected_archive_is_idempotent_and_preserves_published_posts(): void
     {
         $brand = $this->application();

@@ -18,7 +18,7 @@ class XAuthorizationController extends Controller
     {
         abort_unless($account->provider === 'x' && $account->brand->user_id === $request->user()->id, 404);
         if (! XToken::configured()) {
-            return to_route('social', ['provider' => 'x'])->withErrors(['connection' => 'Configure X_CLIENT_ID, X_CLIENT_SECRET and X_REDIRECT_URI on the server first.']);
+            return to_route('applications.accounts.edit', [$account->brand_id, $account])->withErrors(['connection' => 'Configure X_CLIENT_ID, X_CLIENT_SECRET and X_REDIRECT_URI on the server first.']);
         }
         $state = Str::random(64);
         $verifier = Str::random(64);
@@ -85,6 +85,6 @@ class XAuthorizationController extends Controller
             return $failure();
         }
 
-        return to_route('social', ['provider' => 'x'])->with('success', 'X account connected and verified. Access will renew automatically while authorization remains valid.');
+        return to_route('applications.accounts.edit', [$account->brand_id, $account])->with('success', 'X account connected and verified. Access will renew automatically while authorization remains valid.');
     }
 }

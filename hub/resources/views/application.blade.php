@@ -2,7 +2,7 @@
 @section('title', $application->name)
 @section('content')
 @include('application-nav')
-<div class="page-heading"><div><div class="eyebrow">STEP 2 · CHOOSE A SOCIAL ACCOUNT</div><h1>{{ $application->name }}</h1><p class="muted">Select an account to see its posts and prepare your next update.</p></div><a class="button secondary" href="{{ route('social',['brand'=>$application->id]) }}">＋ Connect account</a></div>
+<div class="page-heading"><div><div class="eyebrow">STEP 2 · CHOOSE A SOCIAL ACCOUNT</div><h1>{{ $application->name }}</h1><p class="muted">Select an account to see its posts and prepare your next update.</p></div><a class="button secondary" href="{{ route('applications.accounts.create',$application) }}">＋ Connect account</a></div>
 <div class="cards account-cards">
 @forelse($accounts as $account)
 @php($platform = \App\Models\Post::CHANNELS[$account->provider] ?? ucfirst($account->provider))
@@ -11,10 +11,10 @@
     <h2>{{ $platform }}</h2><p class="account-name">{{ $account->display_name ?: $account->page_name ?: $application->name }}</p>
     <p class="muted small">Account ID: {{ $account->page_id }}</p>
     <div class="account-card-bottom"><strong>{{ $counts[$account->id] }} posts & drafts</strong><a class="button" href="{{ route('posts',['brand'=>$application->id,'channel'=>$account->provider,'account'=>$account->id]) }}">View posts →</a></div>
-    <a class="account-settings" href="{{ route('social',['brand'=>$application->id,'provider'=>$account->provider,'account'=>$account->id]) }}#account-{{ $account->id }}">Connection settings</a>
+    <a class="account-settings" href="{{ route('applications.accounts.edit',[$application,$account]) }}">Connection settings</a>
 </article>
 @empty
-<div class="panel empty wide"><h2>Connect {{ $application->name }}’s first account</h2><p>Your Facebook, X and other accounts will appear here.</p><a class="button" href="{{ route('social',['brand'=>$application->id]) }}">Connect a social account</a></div>
+<div class="panel empty wide"><h2>Connect {{ $application->name }}’s first account</h2><p>Your Facebook, X and other accounts will appear here.</p><a class="button" href="{{ route('applications.accounts.create',$application) }}">Connect a social account</a></div>
 @endforelse
 </div>
 <div class="application-secondary"><a href="{{ route('posts',['brand'=>$application->id]) }}">All {{ $application->name }} posts</a><a href="{{ route('applications.edit',$application) }}">Application settings</a></div>

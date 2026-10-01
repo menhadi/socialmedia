@@ -65,6 +65,9 @@ Route::middleware('auth')->group(function () {
     Route::put('/monitoring/applications/{brand}', [MonitoringController::class, 'save'])->name('monitoring.save');
     Route::get('/monitoring/{monitor}', [MonitoringController::class, 'show'])->name('monitoring.show');
     Route::post('/monitoring/{monitor}/check', [MonitoringController::class, 'check'])->middleware('throttle:10,1')->name('monitoring.check');
+    Route::get('/applications/{brand}/social-accounts/new', [SocialAccountController::class, 'createForApplication'])->name('applications.accounts.create');
+    Route::post('/applications/{brand}/social-accounts', [SocialAccountController::class, 'store'])->name('applications.accounts.store');
+    Route::get('/applications/{brand}/social-accounts/{account}/settings', [SocialAccountController::class, 'editForApplication'])->name('applications.accounts.edit');
     Route::get('/social-accounts', [SocialAccountController::class, 'index'])->name('social');
     Route::post('/social-accounts', [SocialAccountController::class, 'store'])->name('social.store');
     Route::put('/social-accounts/{account}', [SocialAccountController::class, 'update'])->name('social.update');

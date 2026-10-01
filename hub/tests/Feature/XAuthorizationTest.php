@@ -51,7 +51,7 @@ class XAuthorizationTest extends TestCase
         Http::fake(['api.x.com/2/oauth2/token' => Http::response($this->grant()),
             'api.x.com/2/users/me' => Http::response(['data' => ['id' => $account->page_id, 'username' => 'pollmedia']])]);
         $callback = route('social.x.callback', ['state' => $parameters['state'], 'code' => 'private-code']);
-        $this->get($callback)->assertRedirect(route('social', ['provider' => 'x']))->assertSessionHasNoErrors();
+        $this->get($callback)->assertRedirect(route('applications.accounts.edit', [$account->brand_id, $account]))->assertSessionHasNoErrors();
         $this->assertSame('new-access', $account->fresh()->access_token);
         $this->assertSame('new-refresh', $account->fresh()->oauth_credentials['refresh_token']);
         $this->assertNotSame($account->credential_version, $account->fresh()->credential_version);
@@ -149,7 +149,7 @@ class XAuthorizationTest extends TestCase
     {
         $account = $this->account();
         config(['services.x.client_secret' => null]);
-        $this->post(route('social.x.connect', $account))->assertRedirect(route('social', ['provider' => 'x']))->assertSessionHasErrors('connection');
+        $this->post(route('social.x.connect', $account))->assertRedirect(route('applications.accounts.edit', [$account->brand_id, $account]))->assertSessionHasErrors('connection');
         Http::assertNothingSent();
     }
 }

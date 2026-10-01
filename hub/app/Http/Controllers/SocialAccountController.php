@@ -22,6 +22,23 @@ class SocialAccountController extends Controller
         abort_unless($account->brand->user_id === $request->user()->id, 404);
     }
 
+    public function createForApplication(Request $request, Brand $brand): View
+    {
+        abort_unless($brand->user_id === $request->user()->id, 404);
+        $request->merge(['brand' => $brand->id, 'account' => null, 'mode' => 'add']);
+
+        return $this->index($request);
+    }
+
+    public function editForApplication(Request $request, Brand $brand, SocialAccount $account): View
+    {
+        $this->own($request, $account);
+        abort_unless($account->brand_id === $brand->id, 404);
+        $request->merge(['brand' => $brand->id, 'account' => $account->id, 'mode' => 'edit']);
+
+        return $this->index($request);
+    }
+
     public function index(Request $request): View
     {
         $accounts = SocialAccount::whereHas('brand', fn ($query) => $query->where('user_id', $request->user()->id))->when($request->filled('brand'), fn ($query) => $query->where('brand_id', $request->integer('brand')))->with('brand')->latest()->get();
@@ -36,11 +53,25 @@ class SocialAccountController extends Controller
             $selected = 'facebook';
         }
 
-        return view('social-accounts', compact('accounts', 'brands', 'providers', 'selected', 'application'));
+        $editingAccount = null;
+        if ($request->filled('account')) {
+            $editingAccount = SocialAccount::whereIn('brand_id', $brands->pluck('id'))->findOrFail($request->integer('account'));
+            abort_if($application && $editingAccount->brand_id !== $application->id, 404);
+            $application = $brands->firstWhere('id', $editingAccount->brand_id);
+            $accounts = collect([$editingAccount]);
+            $selected = $editingAccount->provider;
+        }
+        $adding = $application && ! $editingAccount && $request->input('mode') === 'add';
+
+        return view('social-accounts', compact('accounts', 'brands', 'providers', 'selected', 'application', 'editingAccount', 'adding'));
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, ?Brand $brand = null): RedirectResponse
     {
+        if ($brand) {
+            abort_unless($brand->user_id === $request->user()->id, 404);
+            $request->validate(['brand_id' => ['required', Rule::in([$brand->id])]]);
+        }
         $provider = $request->input('provider', 'facebook');
         $request->merge(['provider' => $provider]);
         $request->validate(['provider' => ['required', 'string', Rule::in(array_keys(AccountSetup::PROVIDERS))]]);
@@ -51,7 +82,7 @@ class SocialAccountController extends Controller
         ] + AccountSetup::rules($provider), [
             'page_id.regex' => AccountSetup::PROVIDERS[$provider]['id_hint'],
         ]);
-        DB::transaction(function () use ($request, $data): void {
+        $savedAccount = DB::transaction(function () use ($request, $data): SocialAccount {
             $brand = Brand::whereKey($data['brand_id'])->where('user_id', $request->user()->id)->lockForUpdate()->firstOrFail();
             if (SocialAccount::where('brand_id', $brand->id)->where('provider', $data['provider'])->where('page_id', $data['page_id'])->exists()) {
                 throw ValidationException::withMessages(['page_id' => 'This account is already saved for this application. Edit its setup below.']);
@@ -64,7 +95,13 @@ class SocialAccountController extends Controller
                 'oauth_credentials' => $this->oauthCredentials($data),
                 'credential_version' => (string) Str::uuid(),
             ])->save();
+
+            return $account;
         }, 5);
+
+        if ($brand) {
+            return redirect()->route('applications.accounts.edit', [$brand, $savedAccount])->with('success', 'Account saved. Manage its connection below.');
+        }
 
         return redirect()->route('social', ['provider' => $provider, 'brand' => $data['brand_id']])->with('success', $provider === 'facebook'
             ? 'Page setup saved. Add a token and verify its identity before publishing.'
