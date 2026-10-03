@@ -48,10 +48,18 @@ class DailyWebsiteContent
     {
         $dom = $this->dom($this->reader->publicHtml($brand->website));
         if ($brand->pyp_only) {
-            $papers = $this->links($dom, $brand, '~\/exam-detail\/[^?]+$~');
-            foreach (array_slice($this->links($dom, $brand, '~\/course-detail\/[^?]+$~'), 0, 2) as $course) {
-                $papers = array_merge($papers, $this->links($this->dom($this->reader->publicHtml($course)), $brand, '~\/exam-detail\/[^?]+$~'));
+            $papers = [];
+            foreach (array_slice($this->links($dom, $brand, '~\/course-detail\/[^?]*(?:previous-year-papers|pyp)[^?]*$~'), 0, 2) as $course) {
+                $courseDom = $this->dom($this->reader->publicHtml($course));
+                foreach ($courseDom->query('//section[@data-exam-type-section="previous_year"]//*[@data-exam]') as $exam) {
+                    $slug = $exam->getAttribute('data-exam');
+                    if (preg_match('/^[a-zA-Z0-9-]+$/', $slug)) {
+                        $papers[] = rtrim($brand->website, '/').'/exam-detail/'.$slug;
+                    }
+                }
             }
+            $papers = array_values(array_unique($papers));
+            usort($papers, fn ($a, $b) => strcmp(hash('sha256', now()->toDateString().$a), hash('sha256', now()->toDateString().$b)));
             foreach (array_slice(array_unique($papers), 0, 4) as $url) {
                 foreach ($this->questions($this->reader->publicHtml($url), $url) as $package) {
                     if (! $brand->posts()->where('channel', $channel)->where('visual->question', $package['visual']['question'])->exists()) {

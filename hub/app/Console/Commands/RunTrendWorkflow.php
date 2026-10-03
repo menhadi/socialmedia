@@ -38,7 +38,7 @@ class RunTrendWorkflow extends Command
                 }
                 $existing = TrendRun::where('brand_id', $rule->brand_id)->where('scope_key', 'rule:'.$rule->id)->where('run_date', $local->toDateString())->first();
                 if ($existing) {
-                    if ($existing->status !== 'skipped' || ($existing->evidence['fallback_content_version'] ?? 0) >= 2) {
+                    if ($existing->status !== 'skipped' || ($existing->evidence['fallback_content_version'] ?? 0) >= NormalPostFallback::CONTENT_VERSION) {
                         continue;
                     }
                     app(NormalPostFallback::class)->run($existing, $rule);

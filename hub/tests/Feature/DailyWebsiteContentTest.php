@@ -22,8 +22,8 @@ class DailyWebsiteContentTest extends TestCase
     {
         $brand = Brand::factory()->create(['website' => 'https://exam.example', 'pyp_only' => true]);
         $this->mock(FetchSource::class, function ($mock): void {
-            $mock->shouldReceive('publicHtml')->with('https://exam.example')->andReturn('<a href="/course-detail/physics">Physics</a>');
-            $mock->shouldReceive('publicHtml')->with('https://exam.example/course-detail/physics')->andReturn('<a href="/exam-detail/physics-2024">Paper</a>');
+            $mock->shouldReceive('publicHtml')->with('https://exam.example')->andReturn('<a href="/course-detail/physics-previous-year-papers">Physics PYP</a><a href="/exam-detail/practice-2024">Practice</a>');
+            $mock->shouldReceive('publicHtml')->with('https://exam.example/course-detail/physics-previous-year-papers')->andReturn('<section data-exam-type-section="previous_year"><button data-exam="physics-2024">Attempt</button></section><section data-exam-type-section="model"><button data-exam="model-2024">Attempt</button></section>');
             $mock->shouldReceive('publicHtml')->with('https://exam.example/exam-detail/physics-2024')->andReturn($this->paper());
         });
         $post = app(DailyWebsiteContent::class)->create($brand, 'facebook');

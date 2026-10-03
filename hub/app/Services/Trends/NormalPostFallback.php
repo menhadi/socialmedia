@@ -16,10 +16,13 @@ use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
 class NormalPostFallback
 {
+    public const CONTENT_VERSION = 3;
+
     public function run(TrendRun $run, AutomationRule $rule): void
     {
         $lock = Cache::lock('normal-fallback-run-'.$run->id, 600);
@@ -35,11 +38,11 @@ class NormalPostFallback
 
     private function prepare(TrendRun $run, AutomationRule $rule): void
     {
-        if ($run->status !== 'skipped' || $run->post_id || ($run->evidence['fallback_content_version'] ?? 0) >= 2
+        if ($run->status !== 'skipped' || $run->post_id || ($run->evidence['fallback_content_version'] ?? 0) >= self::CONTENT_VERSION
             || ! $rule->enabled || ($rule->options['workflow'] ?? 'review') !== 'automatic') {
             return;
         }
-        $run->update(['evidence' => array_merge($run->evidence ?? [], ['fallback_attempted_at' => now()->toIso8601String(), 'fallback_content_version' => 2])]);
+        $run->update(['evidence' => array_merge($run->evidence ?? [], ['fallback_attempted_at' => now()->toIso8601String(), 'fallback_content_version' => self::CONTENT_VERSION])]);
         try {
             $brand = $run->brand;
             $account = SocialAccount::findOrFail($rule->social_account_id);
@@ -80,8 +83,9 @@ class NormalPostFallback
                     'reason' => 'No relevant trend: normal website content scheduled for '.$slot['when']->setTimezone($rule->options['trend']['timezone'])->format('d M H:i').' '.$rule->options['trend']['timezone'].'.']);
             }, 3);
         } catch (\Throwable $error) {
-            $reason = $error instanceof RuntimeException ? $error->getMessage() : 'Normal fallback held by a content, media, budget or publishing check.';
-            $run->update(['evidence' => $run->evidence + ['fallback_reason' => $reason], 'reason' => mb_substr($run->reason.' Normal fallback: '.$reason, 0, 1000)]);
+            $reason = $error instanceof ValidationException ? implode(' ', array_keys($error->errors())).': '.$error->getMessage()
+                : ($error instanceof RuntimeException ? $error->getMessage() : 'Normal fallback held: '.class_basename($error).'.');
+            $run->update(['evidence' => array_merge($run->evidence ?? [], ['fallback_reason' => $reason]), 'reason' => mb_substr($run->reason.' Normal fallback: '.$reason, 0, 1000)]);
         }
     }
 
