@@ -4,6 +4,9 @@
 @php($locked = $post->exists && ($post->archived_at || !in_array($post->status,['draft','reviewed']) || $post->publications()->whereIn('status',['publishing','published','uncertain'])->exists() || $post->schedules()->whereIn('status',['running','uncertain'])->exists()))
 <div class="page-heading"><div><a class="back" href="{{ route('posts',['brand'=>$post->brand_id,'channel'=>$post->channel]) }}">← Content library</a><h1>Make something worth sharing.</h1><p class="muted">Save a draft, refine your message and review it when ready.</p></div></div>
 @if($post->exists)
+@if($post->content_type === 'trend')
+<div class="notice"><strong>Trend-based draft</strong><p>{{ $post->trendRun?->reason }}</p><p><a href="{{ route('trends',['brand'=>$post->brand_id]) }}">View trend sources and captured website evidence</a></p></div>
+@endif
 <div class="notice"><strong>Automation & history</strong><p>{{ $post->automation_reason ?: 'No automatic schedule has been requested for this saved post.' }}</p>
 @if($post->learning_note)<p>{{ $post->learning_note }}</p>@endif
 @foreach($post->schedules()->latest()->limit(3)->get() as $entry)<p>{{ ucfirst($entry->status) }} · {{ $entry->scheduled_at->utc()->format('Y-m-d H:i') }} UTC · {{ $entry->reason }}</p>@endforeach

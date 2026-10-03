@@ -55,6 +55,9 @@ class AiGenerationController extends Controller
     {
         abort_unless($generation->user_id === $request->user()->id, 404);
         abort_unless(in_array($generation->status, ['completed', 'partial'], true), 422);
+        if ($generation->task === 'trend' && ! $generation->post_id) {
+            return redirect()->route('trends', ['brand' => $generation->brand_id])->withErrors(['body' => 'This trend package was skipped or held. Review its evidence and outcome before creating a separate manual draft.']);
+        }
         $data = $request->validate(['title' => 'required|string|max:200', 'body' => 'required|string|max:20000']);
         $post = DB::transaction(function () use ($generation, $data) {
             $locked = AiGeneration::whereKey($generation->id)->lockForUpdate()->firstOrFail();
@@ -70,6 +73,6 @@ class AiGenerationController extends Controller
             return $post;
         }, 3);
 
-        return redirect()->route('posts.edit',$post)->with('success','Saved as a new draft. Review it before publishing.');
+        return redirect()->route('posts.edit', $post)->with('success', 'Saved as a new draft. Review it before publishing.');
     }
 }

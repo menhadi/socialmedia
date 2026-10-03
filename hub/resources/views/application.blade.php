@@ -3,7 +3,7 @@
 @section('content')
 @include('application-nav')
 <div class="page-heading"><div><div class="eyebrow">STEP 2 · CHOOSE A SOCIAL ACCOUNT</div><h1>{{ $application->name }}</h1><p class="muted">Select an account to see its posts and prepare your next update.</p></div><a class="button secondary" href="{{ route('applications.accounts.create',$application) }}">＋ Connect account</a></div>
-<div class="cards account-cards">
+<p><a class="button secondary" href="{{ route('trends',['brand'=>$application->id]) }}">Configure daily trend posts</a></p><div class="cards account-cards">
 @forelse($accounts as $account)
 @php($platform = \App\Models\Post::CHANNELS[$account->provider] ?? ucfirst($account->provider))
 <article class="panel account-card">

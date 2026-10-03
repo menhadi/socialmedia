@@ -16,6 +16,7 @@ use App\Http\Controllers\PublishingAssetController;
 use App\Http\Controllers\ResearchController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\SocialAccountController;
+use App\Http\Controllers\TrendController;
 use App\Http\Controllers\XAuthorizationController;
 use Illuminate\Support\Facades\Route;
 
@@ -26,6 +27,11 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:5,1');
 });
 Route::middleware('auth')->group(function () {
+    Route::get('/trends', [TrendController::class, 'index'])->name('trends');
+    Route::put('/trends/accounts/{account}', [TrendController::class, 'saveAccount'])->name('trends.accounts.save');
+    Route::post('/trends/rules/{rule}/generate', [TrendController::class, 'generateAccount'])->middleware('throttle:3,1')->name('trends.accounts.generate');
+    Route::put('/trends/{brand}', [TrendController::class, 'save'])->name('trends.save');
+    Route::post('/trends/{brand}/generate', [TrendController::class, 'generate'])->middleware('throttle:3,1')->name('trends.generate');
     Route::get('/social-accounts/x/callback', [XAuthorizationController::class, 'callback'])->middleware('throttle:10,1')->name('social.x.callback');
     Route::post('/social-accounts/{account}/x/connect', [XAuthorizationController::class, 'connect'])->middleware('throttle:10,1')->name('social.x.connect');
     Route::post('/posts/{post}/plan-cards', CardPlanController::class)->middleware('throttle:5,1')->name('posts.cards.plan');

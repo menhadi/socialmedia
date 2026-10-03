@@ -6,6 +6,7 @@ use App\Services\Research\ContentVisual;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Validation\ValidationException;
 
 class Post extends Model
@@ -41,6 +42,11 @@ class Post extends Model
     public function schedules(): HasMany
     {
         return $this->hasMany(PostSchedule::class);
+    }
+
+    public function trendRun(): HasOne
+    {
+        return $this->hasOne(TrendRun::class);
     }
 
     public function publishingFingerprint(): string

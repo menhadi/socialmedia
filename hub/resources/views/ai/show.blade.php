@@ -11,6 +11,9 @@
  @if($generation->post_id)
   <div class="notice success"><strong>Saved to your content library.</strong><p><a href="{{ route('posts.edit',$generation->post_id) }}">Open the saved draft →</a></p></div>
   <div class="panel preview"><div class="post-body">{{ $generation->result }}</div></div>
+ @elseif($generation->task === 'trend')
+  <div class="notice"><p>This trend package was skipped or held. Check its sources and outcome in <a href="{{ route('trends',['brand'=>$generation->brand_id]) }}">Trend posts</a>.</p></div>
+  <div class="panel preview"><div class="post-body">{{ $generation->result }}</div></div>
  @else
   <form class="panel form-panel" method="post" action="{{ route('ai.save',$generation) }}">@csrf
    <label>Internal title<input name="title" required maxlength="200" value="{{ old('title',$generation->title) }}"></label>

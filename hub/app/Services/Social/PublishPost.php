@@ -7,6 +7,7 @@ use App\Models\Post;
 use App\Models\Publication;
 use App\Models\SocialAccount;
 use App\Models\User;
+use App\Services\Trends\PublishTrend;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -166,7 +167,8 @@ class PublishPost
             if ($growthSchedule) {
                 try {
                     AutomationRule::assertSchedule($growthSchedule);
-                } catch (\RuntimeException) {
+                    app(PublishTrend::class)->assertSchedule($growthSchedule);
+                } catch (\Throwable) {
                     $this->finish($publication, ['status' => 'failed', 'error_code' => 'platform_approval']);
 
                     return;
@@ -229,6 +231,9 @@ class PublishPost
             $post->status = $result['status'] === 'failed' ? 'reviewed' : $result['status'];
             $post->save();
             $post->schedules()->where('request_key', $publication->request_key)->update(['status' => $result['status'], 'reason' => $result['status'] === 'published' ? null : 'Check publishing history before retrying.']);
+            if ($post->content_type === 'trend') {
+                $post->trendRun?->update(['status' => $result['status'], 'reason' => $result['status'] === 'published' ? 'Published after platform freshness, website evidence and audience-window checks.' : 'Check publishing history. No automatic retry will be made.']);
+            }
 
             return $publication;
         }, 5);

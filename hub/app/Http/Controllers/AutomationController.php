@@ -68,6 +68,7 @@ class AutomationController extends Controller
         $data = $r->validate([
             'account' => 'nullable|integer',
             'scope' => ['required', Rule::in(['selected', 'filtered'])],
+            'content_type' => ['nullable', Rule::in(['standard', 'trend'])],
             'post_ids' => 'required_if:scope,selected|array|min:1|max:1000',
             'post_ids.*' => 'required|integer|distinct',
             'brand' => ['nullable', Rule::exists('brands', 'id')->where('user_id', $r->user()->id)],
@@ -78,6 +79,9 @@ class AutomationController extends Controller
             $query = Post::whereHas('brand', fn ($query) => $query->where('user_id', $r->user()->id))
                 ->when($r->filled('brand'), fn ($query) => $query->where('brand_id', $data['brand']))
                 ->when($r->filled('channel'), fn ($query) => $query->where('channel', $data['channel']));
+            if ($r->filled('content_type')) {
+                $query->where('content_type', $data['content_type']);
+            }
             if ($account) {
                 $query->forSocialAccount($account);
             }

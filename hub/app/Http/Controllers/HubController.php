@@ -103,6 +103,9 @@ class HubController extends Controller
         if ($r->filled('channel')) {
             $query->where('channel', $r->string('channel')->toString());
         }
+        if (in_array($r->input('content_type'), ['standard', 'trend'], true)) {
+            $query->where('content_type', $r->input('content_type'));
+        }
         $application = $r->filled('brand') ? $brands->firstWhere('id', $r->integer('brand')) : null;
         abort_if($r->filled('brand') && ! $application, 404);
         $account = null;

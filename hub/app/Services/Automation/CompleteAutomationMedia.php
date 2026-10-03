@@ -7,7 +7,9 @@ use App\Models\ContentItem;
 use App\Models\MediaGeneration;
 use App\Models\Post;
 use App\Models\SourceSnapshot;
+use App\Models\TrendRun;
 use App\Services\Media\GenerateMedia;
+use App\Services\Trends\PublishTrend;
 use Illuminate\Support\Facades\DB;
 
 class CompleteAutomationMedia
@@ -34,7 +36,12 @@ class CompleteAutomationMedia
                 }
                 $snapshot = ($context['snapshot_id'] ?? null) ? SourceSnapshot::findOrFail($context['snapshot_id']) : null;
                 app(GenerateMedia::class)->attach($job);
-                app(RunAutomation::class)->queue($post->fresh(), $rule, $snapshot, mediaReady: true);
+                if ($rule->category === 'trend') {
+                    $run = TrendRun::findOrFail($context['trend_run_id']);
+                    app(PublishTrend::class)->queue($run, $rule, mediaReady: true);
+                } else {
+                    app(RunAutomation::class)->queue($post->fresh(), $rule, $snapshot, mediaReady: true);
+                }
                 $job->update(['automation_context' => null]);
                 ContentItem::where('post_id', $post->id)->update(['status' => 'scheduled', 'reason' => 'Generated media attached and scheduled after checks.']);
                 $snapshot?->update(['status' => 'scheduled', 'reason' => 'Generated media scheduled with official source rechecks at delivery.']);
@@ -45,6 +52,7 @@ class CompleteAutomationMedia
             Post::whereKey($job->post_id)->update(['automation_reason' => $reason]);
             ContentItem::where('post_id', $job->post_id)->update(['status' => 'held', 'reason' => $reason]);
             SourceSnapshot::where('post_id', $job->post_id)->update(['status' => 'review', 'reason' => $reason]);
+            TrendRun::where('post_id', $job->post_id)->where('status', 'media')->update(['status' => 'held', 'reason' => $reason]);
         }
     }
 }

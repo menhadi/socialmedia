@@ -10,6 +10,7 @@ use App\Models\SocialAccount;
 use App\Models\SourceSnapshot;
 use App\Models\User;
 use App\Services\Research\FetchSource;
+use App\Services\Trends\PublishTrend;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -69,6 +70,7 @@ class SchedulePost
             $schedule->refresh();
             $post = $schedule->post;
             AutomationRule::assertSchedule($schedule);
+            app(PublishTrend::class)->assertSchedule($schedule);
             if ($post->archived_at) {
                 throw new \RuntimeException('Post archived.');
             }
@@ -100,8 +102,14 @@ class SchedulePost
             ]);
             $schedule->update(['status' => $publication->status === 'publishing' ? 'processing' : $publication->status,
                 'reason' => $publication->status === 'published' ? null : 'Check publishing history. No automatic retry will be made.']);
+            if ($post->content_type === 'trend' && $schedule->automation_rule_id) {
+                $post->trendRun?->update(['status' => $schedule->status, 'reason' => $publication->status === 'published' ? 'Published after platform freshness, website evidence and audience-window checks.' : 'Check publishing history. No automatic retry will be made.']);
+            }
         } catch (\Throwable) {
             $schedule->update(['status' => 'blocked', 'reason' => 'Publishing held: content, source evidence, approval or account credentials changed, or a check failed. Review before scheduling again.']);
+            if ($schedule->post->content_type === 'trend' && $schedule->automation_rule_id) {
+                $schedule->post->trendRun?->update(['status' => 'held', 'reason' => $schedule->reason]);
+            }
         }
     }
 }

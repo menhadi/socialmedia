@@ -25,6 +25,24 @@ class FetchSource
 
     public function fetch(string $url, ?string $elementId = null): string
     {
+        [$body, $type] = $this->download($url);
+
+        return $this->extract($body, $type, $elementId);
+    }
+
+    public function feed(string $url): string
+    {
+        [$body, $type] = $this->download($url);
+        if (! in_array($type, ['text/xml', 'application/xml', 'application/rss+xml', 'application/atom+xml', 'text/plain'], true)) {
+            throw new RuntimeException('Use an RSS or Atom feed.');
+        }
+
+        return $body;
+    }
+
+    /** @return array{string,string} */
+    private function download(string $url): array
+    {
         $this->validate($url);
         $options = $this->endpoint->options(explode('?', $url, 2)[0]);
         $limit = 4 * 1024 * 1024;
@@ -50,6 +68,12 @@ class FetchSource
             throw new RuntimeException('The source is larger than 4 MB.');
         }
         $type = strtolower(explode(';', $response->header('Content-Type'))[0]);
+
+        return [$body, $type];
+    }
+
+    private function extract(string $body, string $type, ?string $elementId): string
+    {
         if ($type === 'application/pdf' || str_starts_with($body, '%PDF-')) {
             $text = $this->pdf($body);
         } elseif (in_array($type, ['text/html', 'application/xhtml+xml', 'text/xml', 'application/xml', 'application/rss+xml', 'application/atom+xml', 'text/plain'], true)) {

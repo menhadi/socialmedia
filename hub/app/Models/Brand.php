@@ -17,7 +17,7 @@ class Brand extends Model
 
     protected function casts(): array
     {
-        return ['pyp_only' => 'boolean'];
+        return ['pyp_only' => 'boolean', 'trend_settings' => 'array'];
     }
 
     public function socialAccounts(): HasMany
