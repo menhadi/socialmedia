@@ -9,6 +9,7 @@ use App\Http\Controllers\CardPlanController;
 use App\Http\Controllers\FacebookWebhookController;
 use App\Http\Controllers\HubController;
 use App\Http\Controllers\MediaController;
+use App\Http\Controllers\MetaAuthorizationController;
 use App\Http\Controllers\MonitoringController;
 use App\Http\Controllers\PublicationController;
 use App\Http\Controllers\PublicationDeletionController;
@@ -32,6 +33,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/trends/rules/{rule}/generate', [TrendController::class, 'generateAccount'])->middleware('throttle:3,1')->name('trends.accounts.generate');
     Route::put('/trends/{brand}', [TrendController::class, 'save'])->name('trends.save');
     Route::post('/trends/{brand}/generate', [TrendController::class, 'generate'])->middleware('throttle:3,1')->name('trends.generate');
+    Route::get('/social-accounts/meta/callback', [MetaAuthorizationController::class, 'callback'])->middleware('throttle:10,1')->name('social.meta.callback');
+    Route::post('/social-accounts/{account}/meta/connect', [MetaAuthorizationController::class, 'connect'])->middleware('throttle:10,1')->name('social.meta.connect');
     Route::get('/social-accounts/x/callback', [XAuthorizationController::class, 'callback'])->middleware('throttle:10,1')->name('social.x.callback');
     Route::post('/social-accounts/{account}/x/connect', [XAuthorizationController::class, 'connect'])->middleware('throttle:10,1')->name('social.x.connect');
     Route::post('/posts/{post}/plan-cards', CardPlanController::class)->middleware('throttle:5,1')->name('posts.cards.plan');

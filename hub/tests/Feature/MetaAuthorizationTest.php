@@ -1,0 +1,106 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\SocialAccount;
+use App\Models\User;
+use App\Services\Social\MetaAuthorization;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\TestWith;
+use Tests\TestCase;
+
+class MetaAuthorizationTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private function account(string $provider = 'facebook'): SocialAccount
+    {
+        Http::preventStrayRequests();
+        config(['services.facebook.app_id' => '123', 'services.facebook.app_secret' => 'secret',
+            'services.facebook.redirect_uri' => 'https://hub.example/social-accounts/meta/callback', 'services.facebook.version' => 'v25.0']);
+        $account = SocialAccount::factory()->create(['provider' => $provider, 'page_id' => '456']);
+        $this->actingAs(User::findOrFail($account->brand->user_id));
+
+        return $account;
+    }
+
+    private function start(SocialAccount $account): array
+    {
+        $response = $this->post(route('social.meta.connect', $account))->assertRedirect();
+        parse_str(parse_url($response->headers->get('Location'), PHP_URL_QUERY), $parameters);
+
+        return $parameters;
+    }
+
+    private function fakeGrant(SocialAccount $account, bool $match = true, bool $permissions = true): void
+    {
+        Http::fake([
+            'https://graph.facebook.com/v25.0/oauth/access_token*' => fn ($request) => Http::response([
+                'access_token' => isset($request['fb_exchange_token']) ? 'long-user' : 'short-user', 'expires_in' => 5184000,
+            ]),
+            'https://graph.facebook.com/v25.0/me/permissions*' => Http::response(['data' => array_map(fn ($scope) => ['permission' => $scope, 'status' => $permissions ? 'granted' : 'declined'], MetaAuthorization::scopes($account))]),
+            'https://graph.facebook.com/v25.0/me/accounts*' => Http::response(['data' => [[
+                'id' => $account->provider === 'facebook' && $match ? '456' : '789', 'name' => 'Page',
+                'access_token' => 'page-token', 'instagram_business_account' => ['id' => $match ? '456' : '999'],
+            ]]]),
+            'https://graph.facebook.com/v25.0/me?*' => Http::response(['id' => '456', 'name' => 'Verified Page', 'category' => 'Education']),
+            'https://graph.facebook.com/v25.0/456*' => Http::response(['id' => '456', 'name' => 'Verified Page', 'username' => 'verified_instagram']),
+        ]);
+    }
+
+    #[TestWith(['facebook'])]
+    #[TestWith(['instagram'])]
+    public function test_matching_identity_is_connected_with_encrypted_page_credentials(string $provider): void
+    {
+        $account = $this->account($provider);
+        $version = $account->credential_version;
+        $parameters = $this->start($account);
+        $this->assertSame('123', $parameters['client_id']);
+        $this->fakeGrant($account);
+        $this->get(route('social.meta.callback', ['state' => $parameters['state'], 'code' => 'code']))->assertSessionHasNoErrors();
+        $saved = $account->fresh();
+        $this->assertSame('page-token', $saved->access_token);
+        $this->assertSame('meta_page', $saved->oauth_credentials['connection_type']);
+        $this->assertNotSame($version, $saved->credential_version);
+        $this->assertNotNull($saved->verified_at);
+        $this->assertNull($saved->token_expires_at);
+        $this->assertStringNotContainsString('page-token', $saved->getRawOriginal('access_token'));
+        $this->get(route('social.meta.callback', ['state' => $parameters['state'], 'code' => 'code']))->assertSessionHasErrors('connection');
+        Http::assertSentCount(5);
+    }
+
+    #[TestWith([false, true])]
+    #[TestWith([true, false])]
+    public function test_wrong_identity_or_missing_permissions_preserves_existing_credentials(bool $match, bool $permissions): void
+    {
+        $account = $this->account();
+        $original = $account->access_token;
+        $parameters = $this->start($account);
+        $this->fakeGrant($account, $match, $permissions);
+        $this->get(route('social.meta.callback', ['state' => $parameters['state'], 'code' => 'code']))->assertSessionHasErrors('connection');
+        $this->assertSame($original, $account->fresh()->access_token);
+        $this->assertNull($account->fresh()->oauth_credentials);
+    }
+
+    public function test_wrong_state_disconnection_and_foreign_accounts_cannot_connect(): void
+    {
+        $account = $this->account();
+        $parameters = $this->start($account);
+        $this->get(route('social.meta.callback', ['state' => 'wrong', 'code' => 'code']))->assertSessionHasErrors('connection');
+        $this->delete(route('social.disconnect', $account));
+        $this->get(route('social.meta.callback', ['state' => $parameters['state'], 'code' => 'code']))->assertSessionHasErrors('connection');
+        $foreign = SocialAccount::factory()->create(['provider' => 'facebook']);
+        $this->post(route('social.meta.connect', $foreign))->assertNotFound();
+        Http::assertNothingSent();
+    }
+
+    public function test_missing_server_configuration_explains_setup_without_external_request(): void
+    {
+        $account = $this->account();
+        config(['services.facebook.app_id' => null]);
+        $this->post(route('social.meta.connect', $account))->assertSessionHasErrors('connection');
+        $this->get(route('social'))->assertOk()->assertSee('FACEBOOK_APP_ID');
+        Http::assertNothingSent();
+    }
+}

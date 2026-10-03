@@ -63,6 +63,11 @@
         <p class="muted small">{{ $account->brand->name }} · {{ $accountSetup['name'] }} · {{ $accountSetup['kind'] }}</p>
         <p><a href="{{ route('posts',['brand'=>$account->brand_id,'channel'=>$account->provider,'account'=>$account->id]) }}">View {{ $accountSetup['name'] }} posts</a></p><p class="small account-identifier">{{ $accountSetup['id_label'] }}: <strong>{{ $account->page_id }}</strong></p>
         <div class="tags"><span>{{ ($account->access_token || $account->oauth_credentials)?'Credentials saved':'Awaiting credentials' }}</span><span>Publishing available</span></div>
+        @if(in_array($account->provider, ['facebook', 'instagram'], true))
+            <form method="post" action="{{ route('social.meta.connect', $account) }}">@csrf<button class="button secondary" @disabled(! \App\Services\Social\MetaAuthorization::configured())>{{ ($account->oauth_credentials['connection_type'] ?? '') === 'meta_page' ? 'Reconnect with Facebook' : 'Connect with Facebook' }}</button></form>
+            <p class="muted small">Connect the saved Page or its linked professional Instagram account using long-lived Page authorization. No daily token copying. Reconnect if Meta revokes access. Existing schedules must be checked after reconnecting.</p>
+            @if(! \App\Services\Social\MetaAuthorization::configured())<p class="notice">Server setup needed: FACEBOOK_APP_ID, FACEBOOK_APP_SECRET and FACEBOOK_REDIRECT_URI. Register https://social.examelite.com/social-accounts/meta/callback in your Meta app.</p>@endif
+        @endif
         @if($account->provider === 'x')
             @if($account->oauth_credentials)<p class="small">Automatic token renewal enabled. If access is revoked, reconnect here.</p>@endif
             <form method="post" action="{{ route('social.x.connect', $account) }}">@csrf<button class="button secondary" @disabled(! \App\Services\Social\XToken::configured())>{{ $account->oauth_credentials ? 'Reconnect X' : 'Connect X' }}</button></form>

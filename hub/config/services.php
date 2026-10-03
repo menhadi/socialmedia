@@ -8,7 +8,7 @@ return [
         'redirect_uri' => env('X_REDIRECT_URI'),
     ],
 
-    'facebook' => ['version' => env('FACEBOOK_GRAPH_VERSION', 'v25.0'), 'app_secret' => env('FACEBOOK_APP_SECRET'), 'webhook_verify_token' => env('FACEBOOK_WEBHOOK_VERIFY_TOKEN')],
+    'facebook' => ['app_id' => env('FACEBOOK_APP_ID'), 'redirect_uri' => env('FACEBOOK_REDIRECT_URI'), 'version' => env('FACEBOOK_GRAPH_VERSION', 'v25.0'), 'app_secret' => env('FACEBOOK_APP_SECRET'), 'webhook_verify_token' => env('FACEBOOK_WEBHOOK_VERIFY_TOKEN')],
     'linkedin' => ['version' => env('LINKEDIN_API_VERSION', '202606')],
 
     /*
