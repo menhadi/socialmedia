@@ -68,6 +68,23 @@ class MetaAuthorizationTest extends TestCase
         $this->assertStringNotContainsString('page-token', $saved->getRawOriginal('access_token'));
         $this->get(route('social.meta.callback', ['state' => $parameters['state'], 'code' => 'code']))->assertSessionHasErrors('connection');
         Http::assertSentCount(5);
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/me/accounts')
+            && $request['fields'] === ($provider === 'instagram' ? 'id,name,access_token,instagram_business_account' : 'id,name,access_token'));
+    }
+
+    public function test_provider_rejection_identifies_the_exchange_step_without_exposing_secrets(): void
+    {
+        $account = $this->account();
+        $original = $account->access_token;
+        $parameters = $this->start($account);
+        Http::fake(['https://graph.facebook.com/v25.0/oauth/access_token*' => Http::response([
+            'error' => ['code' => 190, 'error_subcode' => 123, 'message' => 'private-provider-message secret-token'],
+        ], 400)]);
+        $this->get(route('social.meta.callback', ['state' => $parameters['state'], 'code' => 'private-login-code']))
+            ->assertSessionHasErrors(['connection' => MetaAuthorization::failureMessage(62001)]);
+        $this->assertStringNotContainsString('secret-token', json_encode(session('errors')->all()));
+        $this->assertSame($original, $account->fresh()->access_token);
+        Http::assertSentCount(1);
     }
 
     #[TestWith([false, true])]

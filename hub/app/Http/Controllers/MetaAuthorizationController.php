@@ -36,7 +36,7 @@ class MetaAuthorizationController extends Controller
 
     public function callback(Request $request, MetaAuthorization $tokens): RedirectResponse
     {
-        $failure = fn () => to_route('social', ['provider' => 'facebook'])->withErrors(['connection' => 'Meta authorization could not be completed. Select the saved Page or linked Instagram account and grant the required publishing permissions.']);
+        $failure = fn (int $code = 0) => to_route('social', ['provider' => 'facebook'])->withErrors(['connection' => MetaAuthorization::failureMessage($code)]);
         $state = $request->query('state');
         $expected = $request->session()->get('meta_oauth_state');
         if (! is_string($state) || ! is_string($expected) || ! hash_equals($expected, $state)) {
@@ -73,8 +73,8 @@ class MetaAuthorizationController extends Controller
                     'credential_version' => (string) Str::uuid(),
                 ])->save();
             });
-        } catch (\Throwable) {
-            return $failure();
+        } catch (\Throwable $error) {
+            return $failure((int) $error->getCode());
         }
 
         return to_route('applications.accounts.edit', [$account->brand_id, $account])->with('success', 'Meta account connected and verified with Page credentials obtained through long-lived authorization. No daily token replacement is needed; revoked permissions still require reconnection.');

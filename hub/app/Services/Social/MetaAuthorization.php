@@ -4,6 +4,7 @@ namespace App\Services\Social;
 
 use App\Models\SocialAccount;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class MetaAuthorization
@@ -29,12 +30,41 @@ class MetaAuthorization
         if ($token) {
             $request = $request->withToken($token);
         }
-        $response = $request->get('https://graph.facebook.com/'.config('services.facebook.version').'/'.$path, $parameters);
+        $stage = match ($path) {
+            'oauth/access_token' => isset($parameters['fb_exchange_token']) ? 62002 : 62001,
+            'me/permissions' => 62003,
+            default => 62004,
+        };
+        try {
+            $response = $request->get('https://graph.facebook.com/'.config('services.facebook.version').'/'.$path, $parameters);
+        } catch (\Throwable) {
+            throw new RuntimeException('Meta request failed.', $stage);
+        }
         if (! $response->successful() || $response->json('error') || ! is_array($response->json())) {
-            throw new RuntimeException('Meta authorization failed.');
+            Log::warning('Meta authorization request rejected', [
+                'stage' => $stage, 'status' => $response->status(),
+                'provider_code' => is_numeric($response->json('error.code')) ? (int) $response->json('error.code') : null,
+                'provider_subcode' => is_numeric($response->json('error.error_subcode')) ? (int) $response->json('error.error_subcode') : null,
+            ]);
+            throw new RuntimeException('Meta authorization failed.', $stage);
         }
 
         return $response->json();
+    }
+
+    public static function failureMessage(int $code): string
+    {
+        return match ($code) {
+            62001 => 'Meta could not exchange the login code. Check that the server App ID, App Secret and callback belong to the same Meta app.',
+            62002 => 'Meta could not exchange the token for long-lived authorization.',
+            62003 => 'Meta could not read the granted publishing permissions.',
+            62004 => 'Meta could not list the authorized Pages. Check the Meta app permissions and Page access.',
+            62010 => 'Meta did not issue a login access token.',
+            62011 => 'Meta did not issue valid long-lived authorization.',
+            62012 => 'Required publishing permissions were not granted. Reconnect and enable the requested Page or Instagram permissions.',
+            62013 => 'The authorized Pages do not include this saved Page or linked Instagram account.',
+            default => 'Meta authorization could not be completed. Select the saved Page or linked Instagram account and grant the required publishing permissions.',
+        };
     }
 
     public function credentials(SocialAccount $account, string $code): array
@@ -45,21 +75,22 @@ class MetaAuthorization
         $parameters = ['client_id' => config('services.facebook.app_id'), 'client_secret' => config('services.facebook.app_secret')];
         $short = $this->read('oauth/access_token', $parameters + ['redirect_uri' => config('services.facebook.redirect_uri'), 'code' => $code]);
         if (! is_string($short['access_token'] ?? null) || $short['access_token'] === '') {
-            throw new RuntimeException('Meta did not issue an access token.');
+            throw new RuntimeException('Meta did not issue an access token.', 62010);
         }
         $long = $this->read('oauth/access_token', $parameters + ['grant_type' => 'fb_exchange_token', 'fb_exchange_token' => $short['access_token']]);
         $token = $long['access_token'] ?? null;
         if (! is_string($token) || $token === '' || ! is_numeric($long['expires_in'] ?? null) || $long['expires_in'] < 86400) {
-            throw new RuntimeException('Meta did not issue long-lived authorization.');
+            throw new RuntimeException('Meta did not issue long-lived authorization.', 62011);
         }
         $permissions = $this->read('me/permissions', token: $token);
         $granted = array_column(array_filter($permissions['data'] ?? [], fn (array $permission) => ($permission['status'] ?? '') === 'granted'), 'permission');
         if (array_diff(self::scopes($account), $granted)) {
-            throw new RuntimeException('Required Meta permissions were not granted.');
+            throw new RuntimeException('Required Meta permissions were not granted.', 62012);
         }
         $after = null;
         for ($page = 0; $page < 5; $page++) {
-            $data = $this->read('me/accounts', ['fields' => 'id,name,access_token,instagram_business_account', 'limit' => 100] + ($after ? ['after' => $after] : []), $token);
+            $fields = 'id,name,access_token'.($account->provider === 'instagram' ? ',instagram_business_account' : '');
+            $data = $this->read('me/accounts', ['fields' => $fields, 'limit' => 100] + ($after ? ['after' => $after] : []), $token);
             foreach ($data['data'] ?? [] as $entry) {
                 $identity = $account->provider === 'instagram' ? data_get($entry, 'instagram_business_account.id') : ($entry['id'] ?? null);
                 if ((string) $identity === $account->page_id && is_string($entry['access_token'] ?? null) && $entry['access_token'] !== '') {
@@ -71,6 +102,6 @@ class MetaAuthorization
                 break;
             }
         }
-        throw new RuntimeException('The authorized Pages do not include this saved account.');
+        throw new RuntimeException('The authorized Pages do not include this saved account.', 62013);
     }
 }
