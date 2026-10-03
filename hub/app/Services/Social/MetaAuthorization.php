@@ -63,6 +63,7 @@ class MetaAuthorization
             62011 => 'Meta did not issue valid long-lived authorization.',
             62012 => 'Required publishing permissions were not granted. Reconnect and enable the requested Page or Instagram permissions.',
             62013 => 'The authorized Pages do not include this saved Page or linked Instagram account.',
+            62014 => 'Meta did not provide publishing credentials for the saved Facebook Page. Check Facebook access to that Page and the app permissions.',
             default => 'Meta authorization could not be completed. Select the saved Page or linked Instagram account and grant the required publishing permissions.',
         };
     }
@@ -101,6 +102,14 @@ class MetaAuthorization
             if (! data_get($data, 'paging.next') || ! is_string($after) || $after === '') {
                 break;
             }
+        }
+        if ($account->provider === 'facebook' && preg_match('/^[0-9]+$/D', (string) $account->page_id)) {
+            $entry = $this->read((string) $account->page_id, ['fields' => 'id,name,access_token'], $token);
+            if ((string) ($entry['id'] ?? '') === (string) $account->page_id
+                && is_string($entry['access_token'] ?? null) && $entry['access_token'] !== '') {
+                return ['access_token' => $entry['access_token'], 'page_id' => (string) $entry['id'], 'name' => $entry['name'] ?? $account->page_name];
+            }
+            throw new RuntimeException('Meta did not provide Page credentials.', 62014);
         }
         throw new RuntimeException('The authorized Pages do not include this saved account.', 62013);
     }

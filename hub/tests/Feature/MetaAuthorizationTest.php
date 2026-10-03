@@ -33,19 +33,20 @@ class MetaAuthorizationTest extends TestCase
         return $parameters;
     }
 
-    private function fakeGrant(SocialAccount $account, bool $match = true, bool $permissions = true): void
+    private function fakeGrant(SocialAccount $account, bool $match = true, bool $permissions = true, bool $direct = false): void
     {
         Http::fake([
             'https://graph.facebook.com/v25.0/oauth/access_token*' => fn ($request) => Http::response([
                 'access_token' => isset($request['fb_exchange_token']) ? 'long-user' : 'short-user', 'expires_in' => 5184000,
             ]),
             'https://graph.facebook.com/v25.0/me/permissions*' => Http::response(['data' => array_map(fn ($scope) => ['permission' => $scope, 'status' => $permissions ? 'granted' : 'declined'], MetaAuthorization::scopes($account))]),
-            'https://graph.facebook.com/v25.0/me/accounts*' => Http::response(['data' => [[
+            'https://graph.facebook.com/v25.0/me/accounts*' => Http::response(['data' => $direct ? [] : [[
                 'id' => $account->provider === 'facebook' && $match ? '456' : '789', 'name' => 'Page',
                 'access_token' => 'page-token', 'instagram_business_account' => ['id' => $match ? '456' : '999'],
             ]]]),
             'https://graph.facebook.com/v25.0/me?*' => Http::response(['id' => '456', 'name' => 'Verified Page', 'category' => 'Education']),
-            'https://graph.facebook.com/v25.0/456*' => Http::response(['id' => '456', 'name' => 'Verified Page', 'username' => 'verified_instagram']),
+            'https://graph.facebook.com/v25.0/456*' => Http::response(['id' => $direct && ! $match ? '999' : '456', 'name' => 'Verified Page', 'username' => 'verified_instagram']
+                + ($direct ? ['access_token' => 'direct-page-token'] : [])),
         ]);
     }
 
@@ -85,6 +86,25 @@ class MetaAuthorizationTest extends TestCase
         $this->assertStringNotContainsString('secret-token', json_encode(session('errors')->all()));
         $this->assertSame($original, $account->fresh()->access_token);
         Http::assertSentCount(1);
+    }
+
+    #[TestWith([true])]
+    #[TestWith([false])]
+    public function test_direct_saved_page_lookup_requires_matching_identity_and_page_credentials(bool $match): void
+    {
+        $account = $this->account();
+        $original = $account->access_token;
+        $parameters = $this->start($account);
+        $this->fakeGrant($account, match: $match, direct: true);
+        $response = $this->get(route('social.meta.callback', ['state' => $parameters['state'], 'code' => 'code']));
+        if ($match) {
+            $response->assertSessionHasNoErrors();
+            $this->assertSame('direct-page-token', $account->fresh()->access_token);
+            $this->assertNotNull($account->fresh()->verified_at);
+        } else {
+            $response->assertSessionHasErrors('connection');
+            $this->assertSame($original, $account->fresh()->access_token);
+        }
     }
 
     #[TestWith([false, true])]
