@@ -231,8 +231,8 @@ class PublishPost
             $post->status = $result['status'] === 'failed' ? 'reviewed' : $result['status'];
             $post->save();
             $post->schedules()->where('request_key', $publication->request_key)->update(['status' => $result['status'], 'reason' => $result['status'] === 'published' ? null : 'Check publishing history before retrying.']);
-            if ($post->content_type === 'trend') {
-                $post->trendRun?->update(['status' => $result['status'], 'reason' => $result['status'] === 'published' ? 'Published after platform freshness, website evidence and audience-window checks.' : 'Check publishing history. No automatic retry will be made.']);
+            if ($post->trendRun !== null) {
+                $post->trendRun?->update(['status' => $result['status'], 'reason' => $result['status'] === 'published' ? (($post->trendRun->package['normal_fallback'] ?? false) ? 'Normal fallback published after content, account and audience-window checks.' : 'Published after platform freshness, website evidence and audience-window checks.') : 'Check publishing history. No automatic retry will be made.']);
             }
 
             return $publication;

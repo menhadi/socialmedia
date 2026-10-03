@@ -5,6 +5,7 @@ namespace App\Services\Trends;
 use App\Models\PostSchedule;
 use App\Models\Publication;
 use App\Models\SocialAccount;
+use App\Models\TrendRun;
 use Carbon\CarbonImmutable;
 use RuntimeException;
 
@@ -57,7 +58,7 @@ class TrendPostingTime
             if ($target->gt($end)) {
                 continue;
             }
-            $count = PostSchedule::where('social_account_id', $account->id)->whereHas('post', fn ($query) => $query->where('content_type', 'trend'))->whereNotIn('status', ['cancelled', 'blocked', 'failed'])->whereBetween('scheduled_at', [$date->utc(), $date->addDay()->utc()->subSecond()])->count();
+            $count = PostSchedule::where('social_account_id', $account->id)->where(fn ($query) => $query->whereHas('post', fn ($post) => $post->where('content_type', 'trend'))->orWhereIn('post_id', TrendRun::where('package->normal_fallback', true)->select('post_id')))->whereNotIn('status', ['cancelled', 'blocked', 'failed'])->whereBetween('scheduled_at', [$date->utc(), $date->addDay()->utc()->subSecond()])->count();
             if ($count >= 1) {
                 continue;
             }

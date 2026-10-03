@@ -6,6 +6,7 @@ use App\Models\AutomationRule;
 use App\Models\Brand;
 use App\Models\TrendRun;
 use App\Services\Trends\GenerateTrendDraft;
+use App\Services\Trends\NormalPostFallback;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 
@@ -32,10 +33,18 @@ class RunTrendWorkflow extends Command
                     continue;
                 }
                 $local = now($settings['timezone']);
-                if ($local->format('H:i') < $settings['daily_time'] || TrendRun::where('brand_id', $rule->brand_id)->where('scope_key', 'rule:'.$rule->id)->where('run_date', $local->toDateString())->exists()) {
+                if ($local->format('H:i') < $settings['daily_time']) {
                     continue;
                 }
-                $service->run(Brand::findOrFail($rule->brand_id), $rule);
+                $existing = TrendRun::where('brand_id', $rule->brand_id)->where('scope_key', 'rule:'.$rule->id)->where('run_date', $local->toDateString())->first();
+                if ($existing) {
+                    if ($existing->status !== 'skipped' || isset($existing->evidence['fallback_attempted_at'])) {
+                        continue;
+                    }
+                    app(NormalPostFallback::class)->run($existing, $rule);
+                } else {
+                    $service->run(Brand::findOrFail($rule->brand_id), $rule);
+                }
                 if (++$processed >= 3 || microtime(true) - $started > 45) {
                     break;
                 }

@@ -97,6 +97,11 @@ class PublishTrend
             || ! hash_equals($run->evidence['post_content_hash'] ?? '', self::contentHash($schedule->post))) {
             throw new RuntimeException('Trend expired, posting window closed or saved content changed.');
         }
+        if (($run->package['normal_fallback'] ?? false) === true && $schedule->post->content_type === 'standard') {
+            $schedule->post->assertContentPolicy();
+
+            return;
+        }
         $account = SocialAccount::findOrFail($schedule->social_account_id);
         $brand = $schedule->post->brand;
         $url = $run->package['landing_url'];

@@ -89,6 +89,67 @@ class AutomaticTrendWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_no_trend_schedules_reviewed_normal_content_for_every_application_once(): void
+    {
+        foreach (['Pollmedia', 'ExamElite', 'Vector Academy'] as $name) {
+            $rule = $this->rule();
+            $brand = Brand::findOrFail($rule->brand_id);
+            $brand->update(['name' => $name]);
+            $post = $brand->posts()->create(['title' => 'Approved normal content', 'body' => self::QUOTE,
+                'source_url' => self::URL, 'channel' => 'x']);
+            $post->forceFill(['status' => 'reviewed', 'reviewed_at' => now()])->save();
+            Http::fake(['https://api.x.com/2/trends/*' => Http::response(['data' => []]), self::URL => Http::response(self::QUOTE, 200, ['Content-Type' => 'text/plain'])]);
+            app(GenerateTrendDraft::class)->run($brand, $rule);
+            $run = TrendRun::where('brand_id', $brand->id)->firstOrFail();
+            $this->assertSame('scheduled', $run->status, $run->reason);
+            $this->assertSame($post->id, $run->post_id);
+            $this->assertSame('standard', $post->fresh()->content_type);
+            $this->assertTrue($run->package['normal_fallback']);
+            app(GenerateTrendDraft::class)->run($brand, $rule, retryDiscovery: true);
+            $this->assertSame(1, $post->schedules()->count());
+            $this->travelTo('2026-10-03 12:30:00');
+            app(PublishTrend::class)->assertSchedule($post->schedules()->first());
+            $this->travelTo('2026-10-03 03:30:00');
+        }
+        $this->assertDatabaseCount('post_schedules', 3);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'deepseek'));
+    }
+
+    public function test_normal_fallback_never_replaces_pyp_policy_with_a_website_excerpt(): void
+    {
+        $rule = $this->rule();
+        $brand = Brand::findOrFail($rule->brand_id);
+        $brand->update(['pyp_only' => true, 'trend_posts_allowed' => true]);
+        Http::fake(['https://api.x.com/2/trends/*' => Http::response(['data' => []])]);
+        app(GenerateTrendDraft::class)->run($brand, $rule);
+        $run = TrendRun::firstOrFail();
+        $this->assertSame('skipped', $run->status);
+        $this->assertStringContainsString('verified PYP', $run->reason);
+        $this->assertDatabaseCount('posts', 0);
+        Http::assertNotSent(fn ($request) => str_contains($request->url(), 'deepseek'));
+    }
+
+    public function test_normal_fallback_generates_an_exact_website_excerpt_and_rechecks_window(): void
+    {
+        $rule = $this->rule();
+        Http::fake([
+            'https://api.x.com/2/trends/*' => Http::response(['data' => []]),
+            self::URL => Http::response(self::QUOTE, 200, ['Content-Type' => 'text/plain']),
+            'https://api.deepseek.com/chat/completions' => Http::response([
+                'choices' => [['message' => ['content' => json_encode(['concerns' => [], 'excerpt_quote' => self::QUOTE, 'headline_quote' => 'Explore GATE'])], 'finish_reason' => 'stop']],
+                'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 100],
+            ]),
+        ]);
+        app(GenerateTrendDraft::class)->run(Brand::findOrFail($rule->brand_id), $rule);
+        $run = TrendRun::firstOrFail();
+        $this->assertSame('scheduled', $run->status, $run->reason);
+        $this->assertSame(self::QUOTE, $run->post->body);
+        $this->assertSame('standard', $run->post->content_type);
+        $this->travelTo('2026-10-03 16:00:00');
+        $this->expectException(RuntimeException::class);
+        app(PublishTrend::class)->assertSchedule(PostSchedule::firstOrFail());
+    }
+
     public function test_native_topics_without_literal_keywords_reach_ai_selection(): void
     {
         $rule = $this->rule();

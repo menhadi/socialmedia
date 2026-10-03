@@ -42,7 +42,7 @@ class GenerateTrendDraft
             ]);
             if (! $run->wasRecentlyCreated) {
                 if (! $retryDiscovery || ! in_array($run->status, ['held', 'skipped'], true) || $run->post_id || $run->ai_generation_id || $run->updated_at->gt(now()->subMinute())) {
-                    return $run;
+                    return $this->finish($run, $rule);
                 }
                 $run->forceFill(['status' => 'running', 'reason' => null, 'evidence' => null, 'package' => null,
                     'settings_version' => $settings['version'], 'automation_version' => $rule?->version, 'social_account_id' => $rule?->social_account_id])->save();
@@ -60,7 +60,7 @@ class GenerateTrendDraft
             if ($evidence['candidates'] === []) {
                 $run->update(['status' => $evidence['errors'] ? 'held' : 'skipped', 'reason' => $evidence['errors'] ? 'No relevant fresh candidates were available; check the '.($account ? 'platform' : 'feed').' errors below.' : 'No relevant topic from the last 48 hours. No filler post was created.']);
 
-                return $run;
+                return $this->finish($run, $rule);
             }
             $pages = [];
             foreach ($settings['landing_pages'] as $url) {
@@ -96,7 +96,7 @@ class GenerateTrendDraft
             if ($package['skip']) {
                 $run->update(['status' => 'skipped', 'reason' => mb_substr($package['reason'], 0, 1000) ?: 'AI found no useful website-relevant angle.']);
 
-                return $run;
+                return $this->finish($run, $rule);
             }
             if (count($package['concerns']) > 0) {
                 throw new RuntimeException('AI flagged concerns. Review the saved evidence and package; no draft was created.');
@@ -153,16 +153,25 @@ class GenerateTrendDraft
                 app(PublishTrend::class)->queue($run->fresh(), $rule);
             }
 
-            return $run->fresh();
+            return $this->finish($run, $rule);
         } catch (\Throwable $error) {
             if ($run && $processing) {
                 $reason = $error instanceof RuntimeException ? $error->getMessage() : 'Trend generation could not finish. Check feed, AI provider and budget settings. No automatic retry was made.';
                 $run->update(['status' => 'held', 'reason' => mb_substr($reason, 0, 1000)]);
             }
 
-            return $run;
+            return $this->finish($run, $rule);
         } finally {
             $lock->release();
         }
+    }
+
+    private function finish(?TrendRun $run, ?AutomationRule $rule): ?TrendRun
+    {
+        if ($run && $rule && $run->fresh()->status === 'skipped') {
+            app(NormalPostFallback::class)->run($run->fresh(), $rule);
+        }
+
+        return $run?->fresh();
     }
 }
