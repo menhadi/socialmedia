@@ -28,12 +28,9 @@ class PlatformTrends
             };
             $keywords = array_filter(array_map('trim', explode(',', $settings['keywords'])));
             $seen = [];
-            $candidates = array_values(array_filter($candidates, function (array $candidate) use ($keywords, &$seen): bool {
+            $candidates = array_values(array_filter($candidates, function (array $candidate) use (&$seen): bool {
                 $key = mb_strtolower(FetchSource::normalize($candidate['topic']));
                 if (isset($seen[$key])) {
-                    return false;
-                }
-                if (! array_any($keywords, fn (string $word) => str_contains(mb_strtolower($candidate['topic'].' '.$candidate['summary']), mb_strtolower($word)))) {
                     return false;
                 }
                 $seen[$key] = true;
@@ -41,7 +38,10 @@ class PlatformTrends
                 return true;
             }));
 
-            return ['candidates' => array_slice($candidates, 0, 15), 'errors' => [], 'platform' => $account->provider, 'retrieved_at' => now()->toIso8601String()];
+            $matches = fn (array $candidate): bool => array_any($keywords, fn (string $word) => str_contains(mb_strtolower($candidate['topic'].' '.$candidate['summary']), mb_strtolower($word)));
+            usort($candidates, fn (array $a, array $b) => (int) $matches($b) <=> (int) $matches($a));
+
+            return ['candidates' => array_slice($candidates, 0, 50), 'errors' => [], 'platform' => $account->provider, 'retrieved_at' => now()->toIso8601String()];
         } catch (\Throwable $error) {
             $reason = get_class($error) === RuntimeException::class ? $error->getMessage() : 'Platform discovery failed. Check trend-read permissions, token validity, API credits and request limits. No Google fallback was used.';
 

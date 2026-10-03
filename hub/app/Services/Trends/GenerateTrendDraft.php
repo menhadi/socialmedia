@@ -20,13 +20,14 @@ class GenerateTrendDraft
 {
     public function __construct(private DiscoverTrends $discovery, private FetchSource $reader, private GenerateContent $ai) {}
 
-    public function run(Brand $brand, ?AutomationRule $rule = null): ?TrendRun
+    public function run(Brand $brand, ?AutomationRule $rule = null, bool $retryDiscovery = false): ?TrendRun
     {
         $lock = Cache::lock('trend-brand-'.$brand->id, 600);
         if (! $lock->get()) {
             return null;
         }
         $run = null;
+        $processing = false;
         try {
             $brand->refresh();
             $rule?->refresh();
@@ -40,8 +41,13 @@ class GenerateTrendDraft
                 'automation_version' => $rule?->version, 'social_account_id' => $rule?->social_account_id,
             ]);
             if (! $run->wasRecentlyCreated) {
-                return $run;
+                if (! $retryDiscovery || ! in_array($run->status, ['held', 'skipped'], true) || $run->post_id || $run->ai_generation_id || $run->updated_at->gt(now()->subMinute())) {
+                    return $run;
+                }
+                $run->forceFill(['status' => 'running', 'reason' => null, 'evidence' => null, 'package' => null,
+                    'settings_version' => $settings['version'], 'automation_version' => $rule?->version, 'social_account_id' => $rule?->social_account_id])->save();
             }
+            $processing = true;
             if ($brand->pyp_only && ! $brand->trend_posts_allowed) {
                 throw new RuntimeException('This application permits only sourced previous-year questions. Trend drafts are held under that policy.');
             }
@@ -96,10 +102,10 @@ class GenerateTrendDraft
                 throw new RuntimeException('AI flagged concerns. Review the saved evidence and package; no draft was created.');
             }
             if (! is_int($package['candidate_index'] ?? null) || ! is_int($package['page_index'] ?? null)
-                || ! is_int($package['relevance'] ?? null) || $package['relevance'] < 75 || $package['relevance'] > 100
+                || ! is_int($package['relevance'] ?? null) || $package['relevance'] < 60 || $package['relevance'] > 100
                 || ! is_string($package['caption'] ?? null) || trim($package['caption']) === '' || mb_strlen($package['caption']) > 10000
                 || ! is_string($package['website_quote'] ?? null)) {
-                throw new RuntimeException('The trend package lacks a strong relevant angle, caption or website evidence.');
+                throw new RuntimeException('The trend package lacks a useful relevant angle, caption or website evidence.');
             }
             $candidate = $evidence['candidates'][$package['candidate_index'] - 1] ?? null;
             $page = $pages[$package['page_index'] - 1] ?? null;
@@ -149,7 +155,7 @@ class GenerateTrendDraft
 
             return $run->fresh();
         } catch (\Throwable $error) {
-            if ($run?->wasRecentlyCreated) {
+            if ($run && $processing) {
                 $reason = $error instanceof RuntimeException ? $error->getMessage() : 'Trend generation could not finish. Check feed, AI provider and budget settings. No automatic retry was made.';
                 $run->update(['status' => 'held', 'reason' => mb_substr($reason, 0, 1000)]);
             }

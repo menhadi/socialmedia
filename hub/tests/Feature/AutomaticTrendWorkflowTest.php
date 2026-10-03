@@ -89,6 +89,49 @@ class AutomaticTrendWorkflowTest extends TestCase
         ]);
     }
 
+    public function test_native_topics_without_literal_keywords_reach_ai_selection(): void
+    {
+        $rule = $this->rule();
+        Http::fake(['https://api.x.com/2/trends/*' => Http::response(['data' => [
+            ['trend_name' => 'Student protests', 'tweet_count' => 2000],
+            ['trend_name' => 'GATE', 'tweet_count' => 1000],
+        ]])]);
+        $result = app(PlatformTrends::class)->run(SocialAccount::findOrFail($rule->social_account_id), $rule->options['trend']);
+        $this->assertSame(['GATE', 'Student protests'], array_column($result['candidates'], 'topic'));
+    }
+
+    public function test_manual_discovery_retry_can_recover_but_never_duplicates_a_generated_post(): void
+    {
+        $rule = $this->rule();
+        Http::fake(['https://api.x.com/2/trends/*' => Http::response(['data' => []])]);
+        $service = app(GenerateTrendDraft::class);
+        $brand = Brand::findOrFail($rule->brand_id);
+        $run = $service->run($brand, $rule);
+        $this->assertSame('skipped', $run->status);
+        $this->fakePlatform();
+        $this->travel(2)->minutes();
+        $this->assertSame('skipped', $service->run($brand, $rule)->status);
+        $retried = $service->run($brand, $rule, retryDiscovery: true);
+        $this->assertSame($run->id, $retried->id);
+        $this->assertSame('scheduled', $retried->status, $retried->reason);
+        $service->run($brand, $rule, retryDiscovery: true);
+        $this->assertDatabaseCount('posts', 1);
+        $this->assertDatabaseCount('trend_runs', 1);
+        Http::assertSentCount(3);
+    }
+
+    public function test_useful_indirect_relevance_is_accepted_with_website_evidence(): void
+    {
+        $rule = $this->rule();
+        $this->fakePlatform();
+        Http::fake(['https://api.deepseek.com/chat/completions' => Http::response([
+            'choices' => [['message' => ['content' => json_encode(['skip' => false, 'reason' => 'Useful audience connection.', 'concerns' => [], 'candidate_index' => 1, 'page_index' => 1, 'relevance' => 65, 'website_quote' => self::QUOTE, 'caption' => 'Useful preparation resources.'])], 'finish_reason' => 'stop']],
+            'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 100],
+        ])]);
+        $run = app(GenerateTrendDraft::class)->run(Brand::findOrFail($rule->brand_id), $rule);
+        $this->assertSame('scheduled', $run->status, $run->reason);
+    }
+
     public function test_automatic_post_uses_exact_website_evidence_and_account_window_once(): void
     {
         $rule = $this->rule();

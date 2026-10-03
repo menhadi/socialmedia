@@ -94,7 +94,7 @@ class TrendController extends Controller
         if (! $rule->enabled) {
             return back()->withErrors(['enabled' => 'Enable this platform trend rule first.']);
         }
-        $service->run($brand, $rule);
+        $service->run($brand, $rule, retryDiscovery: true);
 
         return redirect()->route('trends', ['brand' => $brand->id])->with('success', 'Platform check finished. An eligible automatic post is scheduled inside its audience window; held or skipped attempts are shown below.');
     }
