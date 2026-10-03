@@ -88,7 +88,7 @@ class ContentVisual
                 }
             }
             $data['options'] = array_values(array_filter($data['options'] ?? [], fn ($value) => $value !== null && $value !== ''));
-            $rules += ['visual.question' => 'required|string|max:650', 'visual.options' => 'required|array|min:2|max:6', 'visual.options.*' => 'required|string|max:150|distinct', 'visual.answer' => 'required|integer|min:1|max:'.count($data['options'])];
+            $rules += ['visual.question' => 'required|string|max:650', 'visual.options' => 'required|array|min:2|max:6', 'visual.options.*' => 'required|string|max:150|distinct', 'visual.answer' => (($data['question_kind'] ?? '') === 'pyp' && ! empty($data['provenance_verified']) ? 'nullable' : 'required').'|integer|min:1|max:'.count($data['options'])];
             $keys = ['type', 'question', 'options', 'answer', 'group', 'category', 'exam', 'year', 'topic', 'subtopic', 'difficulty', 'question_kind', 'paper_url', 'provenance_verified'];
         } else {
             $line = ($data['chart_style'] ?? 'bar') === 'line';

@@ -8,6 +8,7 @@ use App\Models\SocialAccount;
 use App\Models\TrendRun;
 use App\Models\User;
 use App\Services\Ai\GenerateContent;
+use App\Services\Research\DailyWebsiteContent;
 use App\Services\Research\FetchSource;
 use App\Services\Research\PostImage;
 use App\Services\Social\SchedulePost;
@@ -34,11 +35,11 @@ class NormalPostFallback
 
     private function prepare(TrendRun $run, AutomationRule $rule): void
     {
-        if ($run->status !== 'skipped' || $run->post_id || isset($run->evidence['fallback_attempted_at'])
+        if ($run->status !== 'skipped' || $run->post_id || ($run->evidence['fallback_content_version'] ?? 0) >= 2
             || ! $rule->enabled || ($rule->options['workflow'] ?? 'review') !== 'automatic') {
             return;
         }
-        $run->update(['evidence' => ($run->evidence ?? []) + ['fallback_attempted_at' => now()->toIso8601String()]]);
+        $run->update(['evidence' => array_merge($run->evidence ?? [], ['fallback_attempted_at' => now()->toIso8601String(), 'fallback_content_version' => 2])]);
         try {
             $brand = $run->brand;
             $account = SocialAccount::findOrFail($rule->social_account_id);
@@ -48,6 +49,9 @@ class NormalPostFallback
             $post = Post::where('brand_id', $brand->id)->where('channel', $rule->channel)
                 ->where('content_type', 'standard')->where('status', 'reviewed')->whereNotNull('reviewed_at')
                 ->whereNull('archived_at')->whereDoesntHave('publications')->whereDoesntHave('schedules')->oldest()->first();
+            if (! $post) {
+                $post = app(DailyWebsiteContent::class)->create($brand, $rule->channel);
+            }
             if (! $post) {
                 if ($brand->pyp_only) {
                     throw new RuntimeException('Normal fallback needs an unused reviewed, verified PYP question from the existing content workflow.');
@@ -60,13 +64,13 @@ class NormalPostFallback
                 if (! $current->enabled || $current->version !== $rule->version || $post->publications()->exists() || $post->schedules()->exists()) {
                     throw new RuntimeException('Normal content or automation settings changed.');
                 }
-                $post->assertContentPolicy();
                 if ($post->channel === 'youtube' && ! $post->video_path) {
                     throw new RuntimeException('Normal YouTube fallback needs a ready original video from the existing media workflow.');
                 }
                 if (($rule->with_image || $post->channel === 'instagram' || $post->visual) && ! $post->image_hash) {
                     $post->forceFill(app(PostImage::class)->create($post))->save();
                 }
+                $post->assertContentPolicy();
                 $slot = app(TrendPostingTime::class)->choose($account, $rule->options['trend'], CarbonImmutable::now()->addDays(3));
                 $options = $post->channel === 'youtube' ? ['privacy' => 'public', 'made_for_kids' => (bool) ($rule->options['made_for_kids'] ?? false)] : [];
                 $schedule = app(SchedulePost::class)->create($post, $account->id, $slot['when'], true, options: $options);

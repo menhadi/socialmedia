@@ -30,6 +30,16 @@ class FetchSource
         return $this->extract($body, $type, $elementId);
     }
 
+    public function publicHtml(string $url): string
+    {
+        [$body, $type] = $this->download($url);
+        if (! in_array($type, ['text/html', 'application/xhtml+xml'], true)) {
+            throw new RuntimeException('Daily selection requires a public HTML content page.');
+        }
+
+        return $body;
+    }
+
     public function feed(string $url): string
     {
         [$body, $type] = $this->download($url);

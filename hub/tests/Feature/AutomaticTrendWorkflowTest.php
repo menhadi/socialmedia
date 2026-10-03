@@ -120,11 +120,11 @@ class AutomaticTrendWorkflowTest extends TestCase
         $rule = $this->rule();
         $brand = Brand::findOrFail($rule->brand_id);
         $brand->update(['pyp_only' => true, 'trend_posts_allowed' => true]);
-        Http::fake(['https://api.x.com/2/trends/*' => Http::response(['data' => []])]);
+        Http::fake(['https://api.x.com/2/trends/*' => Http::response(['data' => []]), 'https://learning.example.com' => Http::response('<html>No paper previews</html>', 200, ['Content-Type' => 'text/html'])]);
         app(GenerateTrendDraft::class)->run($brand, $rule);
         $run = TrendRun::firstOrFail();
         $this->assertSame('skipped', $run->status);
-        $this->assertStringContainsString('verified PYP', $run->reason);
+        $this->assertStringContainsString('previous-year question', $run->reason);
         $this->assertDatabaseCount('posts', 0);
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'deepseek'));
     }
@@ -133,6 +133,7 @@ class AutomaticTrendWorkflowTest extends TestCase
     {
         $rule = $this->rule();
         Http::fake([
+            'https://learning.example.com' => Http::response('<html>No structured source pages</html>', 200, ['Content-Type' => 'text/html']),
             'https://api.x.com/2/trends/*' => Http::response(['data' => []]),
             self::URL => Http::response(self::QUOTE, 200, ['Content-Type' => 'text/plain']),
             'https://api.deepseek.com/chat/completions' => Http::response([
