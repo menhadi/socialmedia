@@ -13,11 +13,11 @@ class Brand extends Model
 
     protected $hidden = ['intake_token_hash'];
 
-    protected $fillable = ['name', 'website', 'description', 'audience', 'tone', 'language', 'instructions', 'ai_connection_id', 'image_connection_id', 'video_connection_id', 'pyp_only'];
+    protected $fillable = ['name', 'website', 'description', 'audience', 'tone', 'language', 'instructions', 'ai_connection_id', 'image_connection_id', 'video_connection_id', 'pyp_only', 'trend_posts_allowed'];
 
     protected function casts(): array
     {
-        return ['pyp_only' => 'boolean', 'trend_settings' => 'array'];
+        return ['pyp_only' => 'boolean', 'trend_posts_allowed' => 'boolean', 'trend_settings' => 'array'];
     }
 
     public function socialAccounts(): HasMany

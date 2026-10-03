@@ -79,6 +79,7 @@ class HubController extends Controller
         }
         $data = $r->validate([
             'pyp_only' => 'sometimes|boolean',
+            'trend_posts_allowed' => 'sometimes|boolean',
             'name' => 'required|string|max:150', 'website' => 'nullable|url:http,https|max:2048', 'description' => 'nullable|string|max:5000', 'audience' => 'nullable|string|max:2000', 'tone' => 'required|string|max:150', 'language' => 'required|string|max:100', 'instructions' => 'nullable|string|max:10000',
             'ai_connection_id' => ['nullable', Rule::exists('ai_connections', 'id')->where('user_id', $r->user()->id)],
             'image_connection_id' => ['nullable', Rule::exists('media_connections', 'id')->where('user_id', $r->user()->id)->where('kind', 'image')],

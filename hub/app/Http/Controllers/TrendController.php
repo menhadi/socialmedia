@@ -46,7 +46,7 @@ class TrendController extends Controller
             'woeid' => 'nullable|integer|min:1|max:2147483647', 'minimum_views' => 'nullable|integer|min:1|max:1000000000',
             'media_kind' => 'required|in:none,image,video', 'made_for_kids' => 'nullable|boolean',
         ]);
-        if ($request->boolean('enabled') && (! $account->verified_at || ! $account->access_token || $brand->pyp_only
+        if ($request->boolean('enabled') && (! $account->verified_at || ! $account->access_token || ($brand->pyp_only && ! $brand->trend_posts_allowed)
             || ! in_array($account->provider, ['facebook', 'instagram', 'x', 'youtube'], true))) {
             throw ValidationException::withMessages(['enabled' => 'Enable only a verified account with supported platform discovery and an application that permits trend content.']);
         }
@@ -109,8 +109,8 @@ class TrendController extends Controller
             'timezone' => 'required|timezone', 'daily_time' => 'required|date_format:H:i',
             'landing_pages' => 'required|string|max:6500',
         ]);
-        if ($request->boolean('enabled') && $brand->pyp_only) {
-            throw ValidationException::withMessages(['enabled' => 'This application permits only sourced previous-year questions. Disable that policy before enabling trend posts.']);
+        if ($request->boolean('enabled') && $brand->pyp_only && ! $brand->trend_posts_allowed) {
+            throw ValidationException::withMessages(['enabled' => 'This application permits only sourced previous-year questions. Allow the website-grounded trend exception in application settings before enabling trend posts.']);
         }
         $pages = array_values(array_unique(array_filter(array_map('trim', preg_split('/\R/u', $data['landing_pages'])))));
         if (count($pages) < 1 || count($pages) > 3 || ! $brand->website) {

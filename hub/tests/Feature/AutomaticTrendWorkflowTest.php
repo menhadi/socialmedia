@@ -27,6 +27,7 @@ use Illuminate\Http\Client\Factory;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\TestWith;
 use RuntimeException;
 use Tests\TestCase;
@@ -107,6 +108,57 @@ class AutomaticTrendWorkflowTest extends TestCase
         $this->assertDatabaseCount('post_schedules', 1);
         Http::assertSentCount(3);
         Http::assertNotSent(fn ($request) => str_contains($request->url(), 'trends.google.com'));
+    }
+
+    public function test_explicit_pyp_trend_exception_preserves_question_provenance_and_rejects_edited_trends(): void
+    {
+        $rule = $this->rule();
+        $brand = Brand::findOrFail($rule->brand_id);
+        $brand->update(['pyp_only' => true, 'trend_posts_allowed' => true]);
+        $this->fakePlatform();
+        $run = app(GenerateTrendDraft::class)->run($brand, $rule);
+        $this->assertSame('scheduled', $run->status, $run->reason);
+        $run->post->assertContentPolicy();
+        $standard = $brand->posts()->create(['title' => 'Unsourced practice', 'body' => 'An original question without a checked paper.', 'channel' => 'x']);
+        foreach ([$standard, $run->post->forceFill(['body' => 'Edited unsupported claims.'])] as $post) {
+            try {
+                $post->assertContentPolicy();
+                $this->fail('The PYP or trend evidence policy must reject this post.');
+            } catch (ValidationException) {
+                $this->assertTrue(true);
+            }
+        }
+        $this->assertTrue($brand->fresh()->pyp_only);
+        Http::assertSent(fn ($request) => str_contains($request->url(), 'deepseek') && str_contains($request['messages'][0]['content'], 'PYP-only instructions apply to question posts'));
+    }
+
+    public function test_revoking_pyp_trend_exception_blocks_already_scheduled_delivery(): void
+    {
+        $rule = $this->rule();
+        $brand = Brand::findOrFail($rule->brand_id);
+        $brand->update(['pyp_only' => true, 'trend_posts_allowed' => true]);
+        $this->fakePlatform();
+        app(GenerateTrendDraft::class)->run($brand, $rule);
+        $schedule = PostSchedule::firstOrFail();
+        $brand->update(['trend_posts_allowed' => false]);
+        $this->travelTo('2026-10-03 12:30:00');
+        app(SchedulePost::class)->run($schedule);
+        $this->assertSame('blocked', $schedule->fresh()->status);
+        $this->assertDatabaseCount('publications', 0);
+    }
+
+    public function test_owner_can_save_trend_exception_without_removing_pyp_requirement(): void
+    {
+        $rule = $this->rule();
+        $brand = Brand::findOrFail($rule->brand_id);
+        $this->put('/applications/'.$brand->id, ['name' => $brand->name, 'website' => $brand->website,
+            'tone' => 'Helpful and clear', 'language' => 'English', 'pyp_only' => 1, 'trend_posts_allowed' => 1])->assertSessionHasNoErrors()->assertRedirect();
+        $this->assertTrue($brand->fresh()->pyp_only);
+        $this->assertTrue($brand->fresh()->trend_posts_allowed);
+        $this->get('/applications/'.$brand->id.'/edit')->assertOk()->assertSee('Also allow website-grounded trend posts');
+        $this->actingAs(User::factory()->create());
+        $this->put('/applications/'.$brand->id, ['trend_posts_allowed' => 0])->assertNotFound();
+        $this->assertTrue($brand->fresh()->trend_posts_allowed);
     }
 
     public function test_worker_attempts_each_platform_independently_and_review_mode_does_not_schedule(): void

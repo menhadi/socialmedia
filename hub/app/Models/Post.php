@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Services\Research\ContentVisual;
+use App\Services\Research\FetchSource;
+use App\Services\Trends\PublishTrend;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -86,7 +88,21 @@ class Post extends Model
         if (($this->visual['type'] ?? '') === 'collection' && count($this->card_images ?? []) !== count($this->visual['cards'])) {
             throw ValidationException::withMessages(['visual' => 'Generate all cards and review the complete set before publishing.']);
         }
-        if ($this->brand()->value('pyp_only')) {
+        $policy = $this->brand()->firstOrFail();
+        if ($policy->pyp_only && $policy->trend_posts_allowed && $this->content_type === 'trend') {
+            $run = $this->trendRun()->first();
+            $quote = FetchSource::normalize($run?->package['website_quote'] ?? '');
+            if (! $run || $run->brand_id !== $this->brand_id || mb_strlen($quote) < 20
+                || ! hash_equals($run->evidence['post_content_hash'] ?? '', PublishTrend::contentHash($this))
+                || $this->source_url !== ($run->package['landing_url'] ?? null)
+                || $this->body !== $quote."\n\n".$this->source_url
+                || strtolower(parse_url($this->source_url ?? '', PHP_URL_HOST) ?? '') !== strtolower(parse_url($policy->website ?? '', PHP_URL_HOST) ?? '')) {
+                throw ValidationException::withMessages(['post' => 'This trend exception requires an unchanged website excerpt and saved discovery evidence. Generate a new eligible trend post.']);
+            }
+
+            return;
+        }
+        if ($policy->pyp_only) {
             app(ContentVisual::class)->assertPreviousYearQuestion($this->visual, $this->source_url);
             if (! $this->image_hash) {
                 throw ValidationException::withMessages(['visual' => 'Create the previous-year question card with its exam and year before publishing.']);

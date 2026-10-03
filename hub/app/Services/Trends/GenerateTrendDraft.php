@@ -42,7 +42,7 @@ class GenerateTrendDraft
             if (! $run->wasRecentlyCreated) {
                 return $run;
             }
-            if ($brand->pyp_only) {
+            if ($brand->pyp_only && ! $brand->trend_posts_allowed) {
                 throw new RuntimeException('This application permits only sourced previous-year questions. Trend drafts are held under that policy.');
             }
             if ($rule && ($rule->brand_id !== $brand->id || $rule->category !== 'trend')) {
@@ -52,7 +52,7 @@ class GenerateTrendDraft
             $evidence = $account ? app(PlatformTrends::class)->run($account, $settings) : $this->discovery->run($settings);
             $run->update(['evidence' => $evidence]);
             if ($evidence['candidates'] === []) {
-                $run->update(['status' => $evidence['errors'] ? 'held' : 'skipped', 'reason' => $evidence['errors'] ? 'No relevant fresh candidates were available; check the feed errors below.' : 'No relevant topic from the last 48 hours. No filler post was created.']);
+                $run->update(['status' => $evidence['errors'] ? 'held' : 'skipped', 'reason' => $evidence['errors'] ? 'No relevant fresh candidates were available; check the '.($account ? 'platform' : 'feed').' errors below.' : 'No relevant topic from the last 48 hours. No filler post was created.']);
 
                 return $run;
             }
@@ -114,7 +114,7 @@ class GenerateTrendDraft
             DB::transaction(function () use ($brand, $settings, $run, $package, $candidate, $page, $hash, $generation, $rule, $quote): void {
                 $current = Brand::whereKey($brand->id)->lockForUpdate()->firstOrFail();
                 $currentRule = $rule ? AutomationRule::whereKey($rule->id)->lockForUpdate()->firstOrFail() : null;
-                if (($rule ? (! $currentRule->enabled || $currentRule->version !== $rule->version) : (! ($current->trend_settings['enabled'] ?? false) || $current->trend_settings['version'] !== $settings['version'])) || $current->pyp_only
+                if (($rule ? (! $currentRule->enabled || $currentRule->version !== $rule->version) : (! ($current->trend_settings['enabled'] ?? false) || $current->trend_settings['version'] !== $settings['version'])) || ($current->pyp_only && ! $current->trend_posts_allowed)
                     || $current->only(['website', 'description', 'audience', 'language', 'instructions']) !== $brand->only(['website', 'description', 'audience', 'language', 'instructions'])) {
                     $run->update(['status' => 'held', 'reason' => 'Application settings changed during generation.']);
 
@@ -127,13 +127,14 @@ class GenerateTrendDraft
                 }
                 $caption = preg_replace('~https?://[^\s<>]+~u', '', $package['caption']);
                 $automatic = $rule && ($rule->options['workflow'] ?? 'review') === 'automatic';
-                if ($automatic && mb_strlen($quote) > ($settings['channel'] === 'x' ? 140 : 1000)) {
+                $grounded = $automatic || ($brand->pyp_only && $brand->trend_posts_allowed);
+                if ($grounded && mb_strlen($quote) > ($settings['channel'] === 'x' ? 140 : 1000)) {
                     throw new RuntimeException('Select a shorter self-contained website excerpt for this platform.');
                 }
                 $post = new Post;
                 $post->forceFill([
-                    'brand_id' => $brand->id, 'content_type' => 'trend', 'title' => $automatic ? mb_substr($quote, 0, 100) : $candidate['topic'],
-                    'body' => ($automatic ? $quote : trim($caption))."\n\n".$page['url'], 'source_url' => $page['url'], 'channel' => $settings['channel'], 'status' => 'draft',
+                    'brand_id' => $brand->id, 'content_type' => 'trend', 'title' => $grounded ? mb_substr($quote, 0, 100) : $candidate['topic'],
+                    'body' => ($grounded ? $quote : trim($caption))."\n\n".$page['url'], 'source_url' => $page['url'], 'channel' => $settings['channel'], 'status' => 'draft',
                 ])->save();
                 $run->update(['evidence' => $run->evidence + ['post_content_hash' => PublishTrend::contentHash($post)],
                     'expires_at' => CarbonImmutable::parse($candidate['published_at'])->addHours(48)->min(CarbonImmutable::now()->addHours(24))]);

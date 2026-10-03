@@ -64,7 +64,10 @@ class ContentPrompt
                 .'Do not copy a news article or include links in caption; the selected website URL will be appended by the application. Avoid keyword stuffing, unrelated hashtags and forced promotional hooks. For Hindi use Devanagari. Never claim to have published or scheduled anything.';
         }
 
-        if ($brand->pyp_only) {
+        if ($brand->pyp_only && $brand->trend_posts_allowed && $data['task'] === 'trend') {
+            $system .= ' The application explicitly permits website-grounded trend posts as a separate category alongside genuine PYP questions. PYP-only instructions apply to question posts, not this trend task. Still preserve every other application instruction and all website evidence checks.';
+        }
+        if ($brand->pyp_only && ! ($brand->trend_posts_allowed && $data['task'] === 'trend')) {
             $system .= ' This application permits only genuine previous-year paper questions. Require supplied source-paper evidence, exam name and year; do not invent practice questions or infer provenance. Preserve the exact question and options. Clearly name the exam and year. If provenance is missing, flag it or explain that no eligible question was supplied.';
         }
 
