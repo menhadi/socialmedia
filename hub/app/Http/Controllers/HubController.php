@@ -139,6 +139,9 @@ class HubController extends Controller
     {
         if ($post) {
             $this->ownBrand($r, $post->brand);
+            if (($post->visual['type'] ?? '') === 'chart_video') {
+                throw ValidationException::withMessages(['post' => 'Daily chart videos keep their captured source data. Manage or retry the daily selection from the Trends page.']);
+            }
         }
         $data = $r->validate([
             'brand_id' => ['required', Rule::exists('brands', 'id')->where('user_id', $r->user()->id)],

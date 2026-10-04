@@ -78,7 +78,7 @@ class WebsiteRotation
                 }
             }
             if (! $url) {
-                return $this->pollmedia($brand, ['cycle' => $state['cycle'] + 1]);
+                return $this->pollmedia($brand, ['cycle' => $state['cycle'] + 1, 'graph_cursor' => $state['graph_cursor'] ?? 0]);
             }
         }
         $label = rawurldecode(basename(parse_url($url, PHP_URL_PATH)));

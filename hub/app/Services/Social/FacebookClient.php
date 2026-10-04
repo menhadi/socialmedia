@@ -83,7 +83,8 @@ class FacebookClient
                     $description .= "\n\n".$publication->link;
                 }
                 $response = $this->request($account)->timeout(120)->attach('source', Storage::disk('local')->get($publication->video_path), 'post.mp4')
-                    ->post($publication->page_id.'/videos', ['description' => $description, 'published' => 'true', 'is_ai_generated' => 'true']);
+                    ->post($publication->page_id.'/videos', ['description' => $description, 'published' => 'true',
+                        'is_ai_generated' => ($publication->post->visual['type'] ?? '') === 'chart_video' ? 'false' : 'true']);
             } elseif ($publication->image_path) {
                 $caption = $publication->message;
                 if ($publication->link && ! str_contains($caption, $publication->link)) {

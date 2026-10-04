@@ -22,6 +22,11 @@ class GenerateTrendDraft
 
     public function run(Brand $brand, ?AutomationRule $rule = null, bool $retryDiscovery = false): ?TrendRun
     {
+        if ($rule && ($rule->options['workflow'] ?? '') === 'automatic' && in_array($rule->channel, ['facebook', 'x'], true)
+            && in_array(strtolower(parse_url($brand->website ?? '', PHP_URL_HOST) ?? ''), ['pollmedia.org', 'www.pollmedia.org'], true)) {
+            // This account's daily slot belongs to the shared historical chart video.
+            return null;
+        }
         $lock = Cache::lock('trend-brand-'.$brand->id, 600);
         if (! $lock->get()) {
             return null;

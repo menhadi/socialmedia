@@ -1,9 +1,11 @@
 @extends('layouts.app')
 @section('title',$post->exists?'Edit post':'Create post')
 @section('content')
+@php($chartVideo = ($post->visual['type']??'') === 'chart_video')
 @php($locked = $post->exists && ($post->archived_at || !in_array($post->status,['draft','reviewed']) || $post->publications()->whereIn('status',['publishing','published','uncertain'])->exists() || $post->schedules()->whereIn('status',['running','uncertain'])->exists()))
 <div class="page-heading"><div><a class="back" href="{{ route('posts',['brand'=>$post->brand_id,'channel'=>$post->channel]) }}">← Content library</a><h1>Make something worth sharing.</h1><p class="muted">Save a draft, refine your message and review it when ready.</p></div></div>
 @if($post->exists)
+@if($chartVideo)<div class="notice"><strong>Daily historical chart video</strong><p>{{ $post->visual['heading'] }} · {{ min($post->visual['labels']) }}–{{ max($post->visual['labels']) }}. Source data is saved with this video. <a href="{{ route('trends',['brand'=>$post->brand_id]) }}">Manage or retry daily publishing</a>.</p></div>@endif
 @if($post->content_type === 'trend')
 <div class="notice"><strong>Trend-based draft</strong><p>{{ $post->trendRun?->reason }}</p><p><a href="{{ route('trends',['brand'=>$post->brand_id]) }}">View trend sources and captured website evidence</a></p></div>
 @endif
@@ -22,7 +24,7 @@
     <div class="editor-grid">
         <form class="panel form-panel" method="post" action="{{ $post->exists?route('posts.update',$post):route('posts.store') }}">
             @csrf @if($post->exists) @method('PUT') @endif
-            <fieldset class="post-fields" @disabled($locked)>
+            <fieldset class="post-fields" @disabled($locked || $chartVideo)>
                 <div class="form-grid">
                     <label>Application<select name="brand_id" required>@foreach($brands as $brand)<option value="{{ $brand->id }}" @selected(old('brand_id',$post->brand_id)==$brand->id)>{{ $brand->name }}</option>@endforeach</select></label>
                     <label>Intended channel<select name="channel">@foreach(\App\Models\Post::CHANNELS as $value=>$label)<option value="{{ $value }}" @selected(old('channel',$post->channel)==$value)>{{ $label }}</option>@endforeach</select></label>
@@ -30,7 +32,7 @@
                 <label>Title (also sent as the YouTube video title)<input name="title" required maxlength="200" value="{{ old('title',$post->title) }}" placeholder="A name to find this post later"></label>
                 <label>Post content<textarea name="body" rows="12" required maxlength="20000" placeholder="What would you like to share?">{{ old('body',$post->body) }}</textarea></label>
                 <label>Source or destination link<input name="source_url" type="url" maxlength="2048" value="{{ old('source_url',$post->source_url) }}" placeholder="https://"></label>
-                <details @if($post->visual || old('visual')) open @endif><summary>Graph or question card</summary>
+                @if(!$chartVideo)<details @if($post->visual || old('visual')) open @endif><summary>Graph or question card</summary>
                     <p class="muted small">Keep the caption short. Supply source data below, save, then create the image. Cards use a high-resolution 2048 × 2048 PNG square with the complete content fitted inside for feed-image posts. Platform thumbnails may crop differently; Stories and Reels need a separate vertical format. Use the exact question or data page as the source link. Plain text and Unicode formulas are supported; questions needing diagrams or complex notation need a separately prepared visual.</p>
                     <label>Card format<select name="visual[type]">@foreach(['none'=>'Headline only','question'=>'Question with options','chart'=>'Data chart','collection'=>'Multiple source cards','source_report'=>'Original website report pages'] as $value=>$label)<option value="{{ $value }}" @selected(old('visual.type',$post->visual['type']??'none')===$value)>{{ $label }}</option>@endforeach</select></label>
                     <label>Original printable report URL<input type="url" name="visual[report_url]" maxlength="2048" value="{{ old('visual.report_url',$post->visual['report_url']??'') }}"><small>For original report pages, use the website’s printable report URL on the same hostname as the source link.</small></label>
@@ -65,7 +67,8 @@
                         <label>Coverage / source note<textarea name="visual[note]" maxlength="180" rows="3">{{ old('visual.note',$post->visual['note']??'') }}</textarea></label>
                     </details>
                 </details>
-                @if(!$locked)<p class="muted small">Editing a reviewed post returns it to draft for another review.</p><div class="actions"><button class="button">Save draft</button></div>@endif
+                @endif
+                @if(!$locked && !$chartVideo)<p class="muted small">Editing a reviewed post returns it to draft for another review.</p><div class="actions"><button class="button">Save draft</button></div>@endif
             </fieldset>
         </form>
         <aside>
@@ -75,12 +78,12 @@
                     <div class="preview-brand"><span class="avatar">{{ mb_substr($post->brand->name,0,1) }}</span><div><strong>{{ $post->brand->name }}</strong><small>{{ \App\Models\Post::CHANNELS[$post->channel] }}</small></div></div>
                     <div class="post-body">{{ $post->body }}</div>
                     @if($post->video_path)<video controls preload="metadata" src="{{ route('posts.video',$post) }}" style="width:100%"></video><p><a href="{{ route('posts.video',$post) }}" download>Download video</a></p>@endif
-                    @if(!$locked && !in_array($post->visual['type']??'',['collection','source_report']))<p><a class="button secondary" href="{{ route('media',$post) }}">Create AI image or video</a></p>@endif
+                    @if(!$locked && !in_array($post->visual['type']??'',['collection','source_report','chart_video']))<p><a class="button secondary" href="{{ route('media',$post) }}">Create AI image or video</a></p>@endif
                     @if($post->card_images)
                         @foreach($post->card_images as $i=>$card)<p>Card {{ $i+1 }} of {{ count($post->card_images) }}</p><img src="{{ route('posts.image',['post'=>$post,'card'=>$i]) }}" alt="Card {{ $i+1 }}" style="width:100%;height:auto;border-radius:12px"><p><a href="{{ route('posts.image',['post'=>$post,'card'=>$i]) }}" download>Download card {{ $i+1 }}</a></p>@endforeach
                     @elseif($post->image_path)<img src="{{ route('posts.image',$post) }}" alt="Branded post image" style="width:100%;height:auto;border-radius:12px"><p><a href="{{ route('posts.image',$post) }}" download="post.png">Download image</a></p>@endif
                     @if(!$locked && $post->card_sources)<form method="post" action="{{ route('posts.cards.plan',$post) }}">@csrf<input type="hidden" name="request_key" value="{{ (string)\Illuminate\Support\Str::uuid() }}"><input type="hidden" name="fingerprint" value="{{ $post->publishingFingerprint() }}"><button class="button secondary">Let AI choose cards and caption</button></form><p class="muted small">Uses the application's AI provider and budget. Changes return this post to draft.</p>@endif
-                    @if(!$locked)<form method="post" action="{{ route('posts.image.create',$post) }}">@csrf<button class="button secondary">{{ $post->image_path?'Regenerate':'Create' }} {{ ($post->visual['type']??'')==='collection' ? 'all cards' : ($post->visual ? 'content card' : 'branded image') }}</button></form><p class="muted small">Saving edits clears attached media and cancels a queued schedule. Generate media after your final edits.</p>@endif
+                    @if(!$locked && !$chartVideo)<form method="post" action="{{ route('posts.image.create',$post) }}">@csrf<button class="button secondary">{{ $post->image_path?'Regenerate':'Create' }} {{ ($post->visual['type']??'')==='collection' ? 'all cards' : ($post->visual ? 'content card' : 'branded image') }}</button></form><p class="muted small">Saving edits clears attached media and cancels a queued schedule. Generate media after your final edits.</p>@endif
                     @if($post->source_url)<a class="source-link" href="{{ $post->source_url }}" target="_blank" rel="noopener noreferrer">{{ $post->source_url }}</a>@endif
                     <p class="muted small">Preview shows the last saved version.</p>
                     @if($post->status==='draft' && !$locked)<form method="post" action="{{ route('posts.review',$post) }}">@csrf<button class="button secondary full">Mark saved version as reviewed</button></form>@endif

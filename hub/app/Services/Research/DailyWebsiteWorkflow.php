@@ -122,7 +122,16 @@ class DailyWebsiteWorkflow
 
                             continue;
                         }
-                        if (! $post->image_hash) {
+                        if (($post->visual['type'] ?? '') === 'chart_video' && ! $post->video_hash) {
+                            $payloads = $batch->fresh()->payloads;
+                            $media = $payloads['posts'][$i]['video_media'] ?? null;
+                            if (! $media) {
+                                $media = app(ChartVideo::class)->create($package['video']);
+                                $payloads['posts'][$i]['video_media'] = $media;
+                                $batch->update(['payloads' => $payloads]);
+                            }
+                            $post->forceFill($media)->save();
+                        } elseif (! $post->image_hash && ! $post->video_hash) {
                             $post->forceFill($this->images->create($post))->save();
                         }
                         DB::transaction(function () use ($post, $rule, $run, $slots, $i): void {
@@ -173,6 +182,8 @@ class DailyWebsiteWorkflow
                 $state = ['overviews' => $previous->filter(fn ($url) => str_contains($url ?? '', '/state/'))->map(fn ($url) => explode('?', explode('#', $url, 2)[0], 2)[0])->unique()->values()->all()];
             }
             [$package, $state] = $this->rotation->pollmedia($brand, $state);
+            [$package, $cursor] = app(PollmediaChart::class)->package($package, $state['graph_cursor'] ?? 0);
+            $state['graph_cursor'] = $cursor;
             $payloads = ['posts' => [$package]];
             $reason = null;
         }
@@ -186,6 +197,9 @@ class DailyWebsiteWorkflow
 
     private function draft(Brand $brand, AutomationRule $rule, array $package, WebsiteDailyBatch $batch): Post
     {
+        if (isset($package['video']) && in_array($rule->channel, ['facebook', 'x'], true)) {
+            $package = $package['video'];
+        }
         $visual = app(ContentVisual::class)->validate($package['visual'], $package['source_url']);
         if (($visual['type'] ?? '') === 'question' && ($batch->payloads['coverage']['question_cycle'] ?? 1) <= 1) {
             $old = Post::where('brand_id', $brand->id)->where('visual->question', $visual['question'])
@@ -201,7 +215,9 @@ class DailyWebsiteWorkflow
         if ($rule->channel === 'x') {
             $body = mb_substr($package['title'], 0, 55)."\n\n".($visual['type'] === 'question'
                 ? 'Try the PYP question in the card. Practise the linked Online Exam paper. #ExamElite'
-                : 'Original report pages with recorded graphs and tables. Full report and source notes in the link. #ElectionData');
+                : ($visual['type'] === 'chart_video'
+                    ? ($visual['election'] === 'pc' ? 'Lok Sabha' : 'Assembly').' '.min($visual['labels']).'–'.max($visual['labels']).'. Recorded history in one chart. Coverage and boundaries vary. #Pollmedia'
+                    : 'Original report pages with recorded graphs and tables. Full report and source notes in the link. #ElectionData'));
         }
 
         return $brand->posts()->create(['channel' => $rule->channel, 'title' => $package['title'], 'body' => $body,
