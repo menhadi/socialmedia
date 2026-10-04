@@ -11,11 +11,37 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 use PHPUnit\Framework\Attributes\TestWith;
+use Symfony\Component\Process\Process;
 use Tests\TestCase;
 
 class NativeReportImagesTest extends TestCase
 {
     use RefreshDatabase;
+
+    #[TestWith(['FATAL: No usable sandbox!', 'sandbox could not start'])]
+    #[TestWith(['chrome_crashpad_handler: --database is required', 'runtime directories'])]
+    #[TestWith(['Running as root without --no-sandbox is not supported', 'application user, not root'])]
+    public function test_browser_crashes_report_actionable_reasons_without_leaking_process_output(string $stderr, string $reason): void
+    {
+        $process = \Mockery::mock(Process::class);
+        $process->shouldReceive('setTimeout')->with(45)->once()->andReturnSelf();
+        $process->shouldReceive('mustRun')->once()->andThrow(new \RuntimeException('signal 6'));
+        $process->shouldReceive('getErrorOutput')->once()->andReturn($stderr.' private-token');
+        $renderer = new class extends NativeReportImages
+        {
+            public function executeTestProcess(Process $process): void
+            {
+                $this->runRenderer($process, 'Original report browser');
+            }
+        };
+        try {
+            $renderer->executeTestProcess($process);
+            $this->fail('The crashed process must fail rendering.');
+        } catch (\RuntimeException $error) {
+            $this->assertStringContainsString($reason, $error->getMessage());
+            $this->assertStringNotContainsString('private-token', $error->getMessage());
+        }
+    }
 
     public function test_report_preserves_original_data_and_styles_and_blocks_active_content(): void
     {

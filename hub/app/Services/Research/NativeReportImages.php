@@ -14,6 +14,23 @@ use Symfony\Component\Process\Process;
 
 class NativeReportImages
 {
+    protected function runRenderer(Process $process, string $stage): void
+    {
+        try {
+            $process->setTimeout(45)->mustRun();
+        } catch (\Throwable $error) {
+            $stderr = strtolower($process->getErrorOutput());
+            $reason = match (true) {
+                str_contains($stderr, 'no usable sandbox'), str_contains($stderr, 'failed to move to new namespace'), str_contains($stderr, 'operation not permitted') => 'Chrome sandbox could not start. Check the service user and server namespace/sandbox permissions.',
+                str_contains($stderr, 'running as root') => 'Chrome must run as the application user, not root.',
+                str_contains($stderr, 'crashpad'), str_contains($stderr, 'permission denied') => 'Chrome could not access its runtime directories. Check temporary-directory permissions and available disk space.',
+                default => 'The renderer stopped before producing report images. Check the server Chrome crash report and process logs.',
+            };
+
+            throw new RuntimeException($stage.': '.$reason, 0, $error);
+        }
+    }
+
     private function instagramPage(string $bytes): string
     {
         $page = imagecreatefromstring($bytes);
@@ -103,13 +120,22 @@ class NativeReportImages
         $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'hub-report-'.Str::uuid();
         File::makeDirectory($directory, 0700);
         try {
+            foreach (['home', 'config', 'cache', 'runtime'] as $folder) {
+                File::makeDirectory($directory.'/'.$folder, 0700);
+            }
             File::put($directory.'/report.html', $this->document($html, $styles));
             $url = 'file:///'.ltrim(str_replace('\\', '/', $directory.'/report.html'), '/');
-            (new Process([$chrome, '--headless', '--disable-gpu', '--disable-background-networking', '--disable-dev-shm-usage',
+            $browser = new Process([$chrome, '--headless', '--disable-gpu', '--disable-background-networking', '--disable-dev-shm-usage',
                 '--user-data-dir='.$directory.'/profile', '--host-resolver-rules=MAP * ~NOTFOUND', '--no-pdf-header-footer',
-                '--print-to-pdf='.$directory.'/report.pdf', $url]))->setTimeout(45)->mustRun();
-            (new Process([$rasterizer, '-png', '-scale-to', '1600', '-f', '1', '-l', (string) CardPlanner::limit($post->channel),
-                $directory.'/report.pdf', $directory.'/page']))->setTimeout(45)->mustRun();
+                '--print-to-pdf='.$directory.'/report.pdf', $url], $directory, [
+                    'HOME' => $directory.'/home',
+                    'XDG_CONFIG_HOME' => $directory.'/config',
+                    'XDG_CACHE_HOME' => $directory.'/cache',
+                    'XDG_RUNTIME_DIR' => $directory.'/runtime',
+                ]);
+            $this->runRenderer($browser, 'Original report browser');
+            $this->runRenderer(new Process([$rasterizer, '-png', '-scale-to', '1600', '-f', '1', '-l', (string) CardPlanner::limit($post->channel),
+                $directory.'/report.pdf', $directory.'/page']), 'Original report PDF converter');
             $files = glob($directory.'/page-*.png');
             natsort($files);
             $cards = [];
