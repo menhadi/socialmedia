@@ -33,12 +33,13 @@ class MetaAuthorizationTest extends TestCase
         return $parameters;
     }
 
-    private function fakeGrant(SocialAccount $account, bool $match = true, bool $permissions = true, bool $direct = false): void
+    private function fakeGrant(SocialAccount $account, bool $match = true, bool $permissions = true, bool $direct = false, ?int $lifetime = 5184000, array $metadata = []): void
     {
         Http::fake([
             'https://graph.facebook.com/v25.0/oauth/access_token*' => fn ($request) => Http::response([
-                'access_token' => isset($request['fb_exchange_token']) ? 'long-user' : 'short-user', 'expires_in' => 5184000,
+                'access_token' => isset($request['fb_exchange_token']) ? 'long-user' : 'short-user', 'expires_in' => $lifetime,
             ]),
+            'https://graph.facebook.com/v25.0/debug_token*' => Http::response(['data' => $metadata]),
             'https://graph.facebook.com/v25.0/me/permissions*' => Http::response(['data' => array_map(fn ($scope) => ['permission' => $scope, 'status' => $permissions ? 'granted' : 'declined'], MetaAuthorization::scopes($account))]),
             'https://graph.facebook.com/v25.0/me/accounts*' => Http::response(['data' => $direct ? [] : [[
                 'id' => $account->provider === 'facebook' && $match ? '456' : '789', 'name' => 'Page',
@@ -71,6 +72,39 @@ class MetaAuthorizationTest extends TestCase
         Http::assertSentCount(5);
         Http::assertSent(fn ($request) => str_contains($request->url(), '/me/accounts')
             && $request['fields'] === ($provider === 'instagram' ? 'id,name,access_token,instagram_business_account' : 'id,name,access_token'));
+    }
+
+    #[TestWith([0])]
+    #[TestWith([172800])]
+    public function test_missing_lifetime_uses_verified_token_metadata(int $remaining): void
+    {
+        $account = $this->account('instagram');
+        $parameters = $this->start($account);
+        $this->fakeGrant($account, lifetime: null, metadata: [
+            'is_valid' => true, 'app_id' => '123',
+            'expires_at' => $remaining ? now()->timestamp + $remaining : 0,
+        ]);
+        $this->get(route('social.meta.callback', ['state' => $parameters['state'], 'code' => 'code']))->assertSessionHasNoErrors();
+        $this->assertSame('page-token', $account->fresh()->access_token);
+        Http::assertSent(fn ($request) => str_contains($request->url(), '/debug_token')
+            && $request['input_token'] === 'long-user' && $request->hasHeader('Authorization', 'Bearer 123|secret'));
+    }
+
+    #[TestWith([[]])]
+    #[TestWith([['is_valid' => false, 'app_id' => '123', 'expires_at' => 0]])]
+    #[TestWith([['is_valid' => true, 'app_id' => '999', 'expires_at' => 0]])]
+    #[TestWith([['is_valid' => true, 'app_id' => '123', 'expires_at' => 1]])]
+    #[TestWith([['is_valid' => true, 'app_id' => '123', 'expires_at' => 0, 'data_access_expires_at' => 1]])]
+    public function test_invalid_metadata_preserves_saved_credentials(array $metadata): void
+    {
+        $account = $this->account('instagram');
+        $original = $account->access_token;
+        $parameters = $this->start($account);
+        $this->fakeGrant($account, lifetime: null, metadata: $metadata);
+        $this->get(route('social.meta.callback', ['state' => $parameters['state'], 'code' => 'code']))
+            ->assertSessionHasErrors(['connection' => MetaAuthorization::failureMessage(62011)]);
+        $this->assertSame($original, $account->fresh()->access_token);
+        Http::assertSentCount(3);
     }
 
     public function test_provider_rejection_identifies_the_exchange_step_without_exposing_secrets(): void

@@ -33,6 +33,7 @@ class MetaAuthorization
         $stage = match ($path) {
             'oauth/access_token' => isset($parameters['fb_exchange_token']) ? 62002 : 62001,
             'me/permissions' => 62003,
+            'debug_token' => 62005,
             default => 62004,
         };
         try {
@@ -59,6 +60,7 @@ class MetaAuthorization
             62002 => 'Meta could not exchange the token for long-lived authorization.',
             62003 => 'Meta could not read the granted publishing permissions.',
             62004 => 'Meta could not list the authorized Pages. Check the Meta app permissions and Page access.',
+            62005 => 'Meta could not verify the authorization lifetime. Try connecting again.',
             62010 => 'Meta did not issue a login access token.',
             62011 => 'Meta did not issue valid long-lived authorization.',
             62012 => 'Required publishing permissions were not granted. Reconnect and enable the requested Page or Instagram permissions.',
@@ -80,7 +82,7 @@ class MetaAuthorization
         }
         $long = $this->read('oauth/access_token', $parameters + ['grant_type' => 'fb_exchange_token', 'fb_exchange_token' => $short['access_token']]);
         $token = $long['access_token'] ?? null;
-        if (! is_string($token) || $token === '' || ! is_numeric($long['expires_in'] ?? null) || $long['expires_in'] < 86400) {
+        if (! is_string($token) || $token === '' || ! $this->hasLongLifetime($long, $token)) {
             throw new RuntimeException('Meta did not issue long-lived authorization.', 62011);
         }
         $permissions = $this->read('me/permissions', token: $token);
@@ -112,5 +114,25 @@ class MetaAuthorization
             throw new RuntimeException('Meta did not provide Page credentials.', 62014);
         }
         throw new RuntimeException('The authorized Pages do not include this saved account.', 62013);
+    }
+
+    private function hasLongLifetime(array $exchange, string $token): bool
+    {
+        if (isset($exchange['expires_in']) && $exchange['expires_in'] !== 0) {
+            return is_numeric($exchange['expires_in']) && $exchange['expires_in'] >= 86400;
+        }
+
+        $inspection = $this->read('debug_token', ['input_token' => $token],
+            config('services.facebook.app_id').'|'.config('services.facebook.app_secret'));
+        $data = $inspection['data'] ?? [];
+        $expires = $data['expires_at'] ?? null;
+        $accessExpires = $data['data_access_expires_at'] ?? 0;
+
+        return ($data['is_valid'] ?? false) === true
+            && (string) ($data['app_id'] ?? '') === (string) config('services.facebook.app_id')
+            && is_numeric($expires)
+            && ((int) $expires === 0 || $expires >= now()->timestamp + 86400)
+            && is_numeric($accessExpires)
+            && ((int) $accessExpires === 0 || $accessExpires > now()->timestamp);
     }
 }
