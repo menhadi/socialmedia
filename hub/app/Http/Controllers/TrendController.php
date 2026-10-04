@@ -7,6 +7,8 @@ use App\Models\Brand;
 use App\Models\Post;
 use App\Models\SocialAccount;
 use App\Models\TrendRun;
+use App\Models\WebsiteDailyBatch;
+use App\Services\Research\DailyWebsiteWorkflow;
 use App\Services\Research\FetchSource;
 use App\Services\Trends\GenerateTrendDraft;
 use Illuminate\Contracts\View\View;
@@ -29,7 +31,9 @@ class TrendController extends Controller
         $accounts = SocialAccount::where('brand_id', $application?->id)->orderBy('provider')->get();
         $rules = AutomationRule::where('brand_id', $application?->id)->where('category', 'trend')->get();
 
-        return view('trends', compact('brands', 'application', 'runs', 'accounts', 'rules'));
+        $dailyBatch = $application ? WebsiteDailyBatch::where('brand_id', $application->id)->where('run_date', now('Asia/Kolkata')->toDateString())->first() : null;
+
+        return view('trends', compact('brands', 'application', 'runs', 'accounts', 'rules', 'dailyBatch'));
     }
 
     public function saveAccount(Request $request, SocialAccount $account, FetchSource $reader): RedirectResponse
@@ -94,7 +98,11 @@ class TrendController extends Controller
         if (! $rule->enabled) {
             return back()->withErrors(['enabled' => 'Enable this platform trend rule first.']);
         }
-        $service->run($brand, $rule, retryDiscovery: true);
+        if (DailyWebsiteWorkflow::manages($brand)) {
+            app(DailyWebsiteWorkflow::class)->run($brand, retry: true);
+        } else {
+            $service->run($brand, $rule, retryDiscovery: true);
+        }
 
         return redirect()->route('trends', ['brand' => $brand->id])->with('success', 'Platform check finished. An eligible automatic post is scheduled inside its audience window; held or skipped attempts are shown below.');
     }

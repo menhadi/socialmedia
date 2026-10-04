@@ -29,6 +29,14 @@ class ContentVisual
 
     public function validate(mixed $input, ?string $sourceUrl): ?array
     {
+        if (is_array($input) && ($input['type'] ?? '') === 'source_report') {
+            $data = Validator::make($input, ['type' => 'required|in:source_report', 'report_url' => 'required|url:https|max:2048'])->validate();
+            if (! $sourceUrl || strtolower(parse_url($sourceUrl, PHP_URL_HOST) ?? '') !== strtolower(parse_url($data['report_url'], PHP_URL_HOST) ?? '')) {
+                throw ValidationException::withMessages(['visual.report_url' => 'Use the original report on the source website.']);
+            }
+
+            return $data;
+        }
         if ($input === null || $input === [] || (is_array($input) && ($input['type'] ?? '') === 'none')) {
             return null;
         }

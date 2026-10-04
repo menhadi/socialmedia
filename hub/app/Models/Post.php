@@ -85,6 +85,9 @@ class Post extends Model
 
     public function assertContentPolicy(): void
     {
+        if (($this->visual['type'] ?? '') === 'source_report' && (! $this->image_hash || ! $this->card_images)) {
+            throw ValidationException::withMessages(['visual' => 'Render the original report pages before publishing.']);
+        }
         if (($this->visual['type'] ?? '') === 'collection' && count($this->card_images ?? []) !== count($this->visual['cards'])) {
             throw ValidationException::withMessages(['visual' => 'Generate all cards and review the complete set before publishing.']);
         }

@@ -4,6 +4,23 @@
 <div class="page-heading"><div><div class="eyebrow">DAILY DISCOVERY</div><h1>Relevant trends. Useful posts.</h1><p class="muted">Discover on each platform, match your website, and publish inside your audience's posting window.</p></div></div>
 <form method="get" class="posts-filters"><label>Application<select name="brand" onchange="this.form.submit()">@foreach($brands as $brand)<option value="{{ $brand->id }}" @selected($application?->id === $brand->id)>{{ $brand->name }}</option>@endforeach</select></label><button class="button secondary">Open</button></form>
 @if($application)
+@if(\App\Services\Research\DailyWebsiteWorkflow::manages($application))
+<div class="panel form-panel"><h2>Daily website rotation</h2>
+@if(str_contains($application->website,'examelite'))
+<p>Five daily posts use five different available Online Exam categories, one previous-year paper question from one exam in each category. Categories rotate across the full available list. Within a category, exams rotate too. Questions remain unused until the PYP question pool is exhausted. Diagrams or formulas that cannot yet be rendered remain pending and do not permit early repeats.</p>
+@else
+<p>One original report per day. Cover every state overview first, then rotate through states for Lok Sabha constituencies, followed by Assembly constituencies. Already published state reports count toward coverage. A new complete cycle starts after the constituency lists are exhausted.</p><p>Images reproduce the website’s printable report graphs and tables with its original styles. The complete report stays linked; each platform receives as many report pages as it supports.</p>
+@endif
+<p>The same daily selection is used across verified accounts with an enabled automatic rule. Posts are spread inside each account’s audience window, at least one hour apart. Late preparation holds excess posts for that day.</p>
+<p class="muted">Daily source worker: {{ \Illuminate\Support\Facades\Cache::get('website-daily-heartbeat') ?: 'Not seen yet' }}.</p>
+@if($dailyBatch)<p>Today: {{ count($dailyBatch->payloads['posts']??[]) }} source posts selected. {{ $dailyBatch->reason }}</p>
+@foreach($dailyBatch->posts??[] as $entry)
+@php
+$dailyRun = !empty($entry['post_id']) ? \App\Models\TrendRun::where('post_id',$entry['post_id'])->first() : null;
+@endphp
+<p>{{ ucfirst($dailyRun?->status ?? $entry['status']) }}@if($entry['post_id']??null) · <a href="{{ route('posts.edit',$entry['post_id']) }}">Open post</a>@endif · {{ $dailyRun?->reason ?? ($entry['reason']??'') }}</p>@endforeach
+@endif</div>
+@endif
 <div class="panel form-panel"><h2>How automatic trend posts work</h2><p>Each enabled platform is checked once per local day. Keywords guide ranking; AI checks the wider subject and audience fit with a useful website page. AI selects a relevant angle and an exact website excerpt. Automatic posts use that excerpt and your website link, avoiding unverified news claims. If no relevant trend is found, the daily workflow selects unused website content. Previous-year paper websites supply a sourced question and options card. Election-data websites supply state or constituency charts with a link to the complete page and report. Other websites can supply an exact excerpt. Question answers are never invented. Failed credentials and flagged content remain held.</p><p>Posts use your preferred time within the audience window, with at least one hour between queued posts. Enough comparable account analytics can guide the time within that window. At delivery, the topic, website evidence, credentials and settings are checked again. Expired topics and closed posting windows are held, never silently posted later.</p><p>Instagram gets an original branded image when needed. Video uses your configured Media provider and budget; unavailable media holds the post. Source-platform images and videos are not copied.</p><p class="muted">Daily worker heartbeat: {{ \Illuminate\Support\Facades\Cache::get('trend-workflow-heartbeat') ?: 'Not seen yet' }}. The server scheduler must be running.</p></div>
 <h2>Platform settings</h2>
 @forelse($accounts as $account)
@@ -38,7 +55,7 @@ $supported = in_array($account->provider,['facebook','instagram','x','youtube'])
 <label>Relevant website pages<textarea name="landing_pages" rows="3" required>{{ implode("\n",$platformSettings['landing_pages'] ?? array_filter([$application->website])) }}</textarea><small>1–3 final public URLs on the configured website hostname.</small></label>
 <p>One attempt per platform rule per local day; maximum one automatic trend post per account per local day. Repeated topics are skipped for 30 days. Saving increments the rule version and holds older schedules.</p><button class="button">Save platform settings</button>
 </form>
-@if($ownedRule?->enabled)<form method="post" action="{{ route('trends.accounts.generate',$ownedRule) }}">@csrf<p><button class="button secondary">Check this platform now</button></p></form>@endif
+@if($ownedRule?->enabled)<form method="post" action="{{ route('trends.accounts.generate',$ownedRule) }}">@csrf<p><button class="button secondary">{{ \App\Services\Research\DailyWebsiteWorkflow::manages($application) ? 'Prepare or retry today’s website posts' : 'Check this platform now' }}</button></p></form>@endif
 @endif</div>
 @empty<div class="panel empty"><p>Connect and verify social accounts to configure platform discovery.</p><a href="{{ url('/social-accounts') }}">Open social accounts</a></div>@endforelse
 @php($settings = $application->trend_settings ?? [])

@@ -9,6 +9,7 @@ use App\Models\TrendRun;
 use App\Models\User;
 use App\Services\Ai\GenerateContent;
 use App\Services\Research\DailyWebsiteContent;
+use App\Services\Research\DailyWebsiteWorkflow;
 use App\Services\Research\FetchSource;
 use App\Services\Research\PostImage;
 use App\Services\Social\SchedulePost;
@@ -45,6 +46,11 @@ class NormalPostFallback
         $run->update(['evidence' => array_merge($run->evidence ?? [], ['fallback_attempted_at' => now()->toIso8601String(), 'fallback_content_version' => self::CONTENT_VERSION])]);
         try {
             $brand = $run->brand;
+            if (DailyWebsiteWorkflow::manages($brand)) {
+                $run->update(['reason' => 'No relevant trend. The daily website rotation supplies this application’s normal posts.']);
+
+                return;
+            }
             $account = SocialAccount::findOrFail($rule->social_account_id);
             if (! $account->verified_at || ! $account->access_token) {
                 throw new RuntimeException('Normal fallback needs a verified publishing account.');

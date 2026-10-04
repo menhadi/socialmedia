@@ -60,7 +60,11 @@ class ChannelRules
             'instagram' => 2200, 'linkedin' => 3000, 'x' => 280, 'youtube' => 5000,
             'whatsapp' => ($post->image_path || $post->video_path) ? 1024 : 4096, default => 63206,
         };
-        // A conservative weighted count avoids truncating non-Latin X posts silently.
+        // X wraps the explicit source URL in t.co, including tracking parameters, for 23 characters.
+        // Keep the remaining Unicode count conservative without guessing about arbitrary pasted links.
+        if ($post->channel === 'x' && filter_var($post->source_url, FILTER_VALIDATE_URL) && in_array(parse_url($post->source_url, PHP_URL_SCHEME), ['http', 'https'], true)) {
+            $text = str_replace($post->source_url, str_repeat('x', 23), $text);
+        }
         $length = $post->channel === 'x' ? array_sum(array_map(fn ($c) => mb_ord($c) <= 0x10FF ? 1 : 2, mb_str_split($text))) : mb_strlen($text);
         if ($length > $limit && ! ($post->channel === 'whatsapp' && ($options['mode'] ?? '') === 'template')) {
             $fail("This channel allows {$limit} characters (X uses weighted characters). Shorten the message or remove the link.");

@@ -11,6 +11,9 @@ class PostImage
 {
     public function create(Post $post): array
     {
+        if (($post->visual['type'] ?? '') === 'source_report') {
+            return app(NativeReportImages::class)->create($post);
+        }
         if (($post->visual['type'] ?? '') === 'collection') {
             $visual = app(ContentVisual::class)->validate($post->visual, $post->source_url);
             $images = [];

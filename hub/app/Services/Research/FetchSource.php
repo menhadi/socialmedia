@@ -40,6 +40,30 @@ class FetchSource
         return $body;
     }
 
+    public function publicJson(string $url): array
+    {
+        [$body, $type] = $this->download($url);
+        if ($type !== 'application/json') {
+            throw new RuntimeException('The daily question feed did not return JSON. Deploy the source connector first.');
+        }
+        $data = json_decode($body, true, 32, JSON_THROW_ON_ERROR);
+        if (! is_array($data)) {
+            throw new RuntimeException('The daily question feed is invalid.');
+        }
+
+        return $data;
+    }
+
+    public function publicCss(string $url): string
+    {
+        [$body, $type] = $this->download($url);
+        if ($type !== 'text/css' || strlen($body) > 512 * 1024) {
+            throw new RuntimeException('The original report stylesheet is unavailable or too large.');
+        }
+
+        return $body;
+    }
+
     public function feed(string $url): string
     {
         [$body, $type] = $this->download($url);

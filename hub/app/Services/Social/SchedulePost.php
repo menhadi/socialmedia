@@ -103,7 +103,7 @@ class SchedulePost
             $schedule->update(['status' => $publication->status === 'publishing' ? 'processing' : $publication->status,
                 'reason' => $publication->status === 'published' ? null : 'Check publishing history. No automatic retry will be made.']);
             if ($post->trendRun !== null && $schedule->automation_rule_id) {
-                $post->trendRun?->update(['status' => $schedule->status, 'reason' => $publication->status === 'published' ? (($post->trendRun->package['normal_fallback'] ?? false) ? 'Normal fallback published after content, account and audience-window checks.' : 'Published after platform freshness, website evidence and audience-window checks.') : 'Check publishing history. No automatic retry will be made.']);
+                $post->trendRun?->update(['status' => $schedule->status, 'reason' => $publication->status === 'published' ? (($post->trendRun->package['website_daily'] ?? false) ? 'Daily website content published after content, account and audience-window checks.' : (($post->trendRun->package['normal_fallback'] ?? false) ? 'Normal fallback published after content, account and audience-window checks.' : 'Published after platform freshness, website evidence and audience-window checks.')) : 'Check publishing history. No automatic retry will be made.']);
             }
         } catch (\Throwable) {
             $schedule->update(['status' => 'blocked', 'reason' => 'Publishing held: content, source evidence, approval or account credentials changed, or a check failed. Review before scheduling again.']);
