@@ -60,6 +60,15 @@ class PollmediaChart
         for ($offset = 0; $offset < count(self::GRAPHS); $offset++) {
             $index = ($cursor + $offset) % count(self::GRAPHS);
             if (isset($available[self::GRAPHS[$index]])) {
+                if (parse_url($url, PHP_URL_PATH) === '/india/constituency' && isset($available['turnout'])) {
+                    $history = $this->history($xpath, $available['turnout']['labels']);
+                    if ($history) {
+                        $available['turnout']['history'] = $history;
+
+                        return ['visual' => $this->validate($available['turnout']), 'next_cursor' => $index + 1];
+                    }
+                }
+
                 return ['visual' => $available[self::GRAPHS[$index]], 'next_cursor' => $index + 1];
             }
         }
@@ -77,8 +86,17 @@ class PollmediaChart
             'series.*.name' => 'required|string|max:60', 'series.*.values' => 'required|array',
             'series.*.values.*' => 'nullable|numeric|min:0|max:'.(($input['unit'] ?? '') === '%' ? '100' : '1000000000000'),
             'series.*.names' => 'required|array', 'series.*.names.*' => 'nullable|string|max:60',
+            'history' => 'sometimes|array|min:2|max:200',
+            'history.*.year' => 'required|integer|between:1800,2200|distinct',
+            'history.*.winner' => 'required|string|max:160', 'history.*.party' => 'required|string|max:60',
+            'history.*.polled' => 'nullable|integer|min:0|max:1000000000000',
+            'history.*.margin' => 'nullable|integer|min:0|max:1000000000000',
+            'history.*.review' => 'required|boolean',
         ])->validate();
         $count = count($data['labels']);
+        if (isset($data['history']) && ($data['graph_key'] !== 'turnout' || array_column($data['history'], 'year') !== $data['labels'])) {
+            throw ValidationException::withMessages(['visual' => 'Constituency history must match every turnout year.']);
+        }
         $usable = [];
         foreach ($data['series'] as $series) {
             if (count($series['values']) !== $count || count($series['names']) !== $count) {
@@ -95,6 +113,48 @@ class PollmediaChart
         }
 
         return $data;
+    }
+
+    private function history(DOMXPath $xpath, array $years): ?array
+    {
+        foreach ($xpath->query('//main//table') as $table) {
+            $headers = [];
+            foreach ($xpath->query('.//tr[1]/th', $table) as $cell) {
+                $headers[] = trim($cell->textContent);
+            }
+            if (array_slice($headers, 0, 6) !== ['Year', 'Winner', 'Party', 'Votes polled', 'Turnout %', 'Margin']) {
+                continue;
+            }
+            $rows = [];
+            foreach ($xpath->query('.//tr', $table) as $tr) {
+                $cells = [];
+                foreach ($xpath->query('./th|./td', $tr) as $cell) {
+                    $cells[] = trim($cell->textContent);
+                }
+                if (count($cells) < 6 || ! ctype_digit($cells[0])) {
+                    continue;
+                }
+                $year = (int) $cells[0];
+                $number = function (string $value): ?int {
+                    $value = trim(str_replace([',', '†'], '', $value));
+
+                    return ctype_digit($value) ? (int) $value : null;
+                };
+                $row = ['year' => $year, 'winner' => trim(str_replace('†', '', $cells[1])), 'party' => $cells[2],
+                    'polled' => $number($cells[3]), 'margin' => $number($cells[5]), 'review' => str_contains(implode(' ', $cells), '†')];
+                if (isset($rows[$year]) && $rows[$year] !== $row) {
+                    return null;
+                }
+                $rows[$year] = $row;
+            }
+            if (array_diff($years, array_keys($rows))) {
+                return null;
+            }
+
+            return array_map(fn ($year) => $rows[$year], $years);
+        }
+
+        return null;
     }
 
     public function package(array $package, int $cursor): array
