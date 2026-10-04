@@ -19,6 +19,7 @@ use App\Services\Social\SchedulePost;
 use App\Services\Trends\PublishTrend;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
@@ -36,6 +37,30 @@ class WebsiteDailyRotationTest extends TestCase
     private function settings(): array
     {
         return ['timezone' => 'Asia/Kolkata', 'daily_time' => '09:00', 'window_start' => '09:00', 'window_end' => '21:00', 'preferred_time' => '18:00'];
+    }
+
+    public function test_web_retry_defers_rendering_to_scheduled_worker_and_is_consumed_once(): void
+    {
+        $user = User::factory()->create();
+        $brand = Brand::factory()->create(['user_id' => $user->id, 'website' => 'https://examelite.com', 'pyp_only' => true]);
+        $rule = $this->rule($brand);
+        $this->actingAs($user);
+        $this->mock(WebsiteRotation::class, fn ($mock) => $mock->shouldReceive('pyp')->once()->andReturn($this->feed()));
+        $this->images();
+        $this->post(route('trends.accounts.generate', $rule))->assertRedirect(route('trends', ['brand' => $brand->id]))
+            ->assertSessionHas('success', fn ($message) => str_contains($message, 'background worker'));
+        $this->assertSame(0, WebsiteDailyBatch::count());
+        $this->assertTrue(Cache::has('website-daily-retry:'.$brand->id));
+        $lock = Cache::lock('website-daily-brand-'.$brand->id, 900);
+        $lock->get();
+        app(DailyWebsiteWorkflow::class)->run($brand);
+        $this->assertTrue(Cache::has('website-daily-retry:'.$brand->id));
+        $lock->release();
+        $this->artisan('hub:run-website-daily')->assertSuccessful();
+        $this->assertSame(5, PostSchedule::count());
+        $this->assertFalse(Cache::has('website-daily-retry:'.$brand->id));
+        $this->artisan('hub:run-website-daily')->assertSuccessful();
+        $this->assertSame(5, PostSchedule::count());
     }
 
     private function rule(Brand $brand, string $channel = 'facebook', bool $verified = true): AutomationRule

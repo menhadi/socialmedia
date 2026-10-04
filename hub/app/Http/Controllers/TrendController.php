@@ -99,7 +99,9 @@ class TrendController extends Controller
             return back()->withErrors(['enabled' => 'Enable this platform trend rule first.']);
         }
         if (DailyWebsiteWorkflow::manages($brand)) {
-            app(DailyWebsiteWorkflow::class)->run($brand, retry: true);
+            DailyWebsiteWorkflow::requestRetry($brand);
+
+            return redirect()->route('trends', ['brand' => $brand->id])->with('success', 'Daily website preparation requested. The background worker will process it on its next scheduled run. Check the daily rotation below for the result.');
         } else {
             $service->run($brand, $rule, retryDiscovery: true);
         }

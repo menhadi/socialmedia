@@ -24,6 +24,11 @@ class DailyWebsiteWorkflow
 {
     public function __construct(private WebsiteRotation $rotation, private PostImage $images, private SchedulePost $scheduler) {}
 
+    public static function requestRetry(Brand $brand): void
+    {
+        Cache::put('website-daily-retry:'.$brand->id, true, now()->addDay());
+    }
+
     public static function manages(Brand $brand): bool
     {
         return in_array(strtolower(parse_url($brand->website ?? '', PHP_URL_HOST) ?? ''), ['examelite.com', 'www.examelite.com', 'pollmedia.org', 'www.pollmedia.org'], true);
@@ -61,6 +66,7 @@ class DailyWebsiteWorkflow
             return;
         }
         try {
+            $retry = (bool) Cache::pull('website-daily-retry:'.$brand->id, false) || $retry;
             $rules = AutomationRule::where('brand_id', $brand->id)->where('category', 'trend')->where('enabled', true)->get()
                 ->filter(fn ($rule) => ($rule->options['workflow'] ?? '') === 'automatic'
                     && in_array($rule->channel, ['facebook', 'instagram', 'linkedin', 'x'], true)
